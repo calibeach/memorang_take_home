@@ -1,5 +1,4 @@
-import { StateGraph, START, END } from "@langchain/langgraph";
-import { MemorySaver } from "@langchain/langgraph";
+import { StateGraph, START, END, MemorySaver } from "@langchain/langgraph";
 import { LearningStateAnnotation, type LearningState } from "./state.js";
 import {
   pdfParserNode,
@@ -9,6 +8,7 @@ import {
   feedbackNode,
   summaryNode,
 } from "./nodes/index.js";
+import { logger } from "./utils/logger.js";
 
 // Define node names as constants
 const NODES = {
@@ -27,7 +27,7 @@ type NodeName = (typeof NODES)[keyof typeof NODES];
  */
 function afterPdfParse(state: LearningState): NodeName | typeof END {
   if (state.error) {
-    console.log("[Router] PDF parsing failed, ending workflow");
+    logger.info("Router", "PDF parsing failed, ending workflow");
     return END;
   }
   return NODES.planner;
@@ -38,7 +38,7 @@ function afterPdfParse(state: LearningState): NodeName | typeof END {
  */
 function afterPlanner(state: LearningState): NodeName | typeof END {
   if (state.error) {
-    console.log("[Router] Planning failed, ending workflow");
+    logger.info("Router", "Planning failed, ending workflow");
     return END;
   }
   return NODES.humanApproval;
@@ -49,7 +49,7 @@ function afterPlanner(state: LearningState): NodeName | typeof END {
  */
 function afterApproval(state: LearningState): NodeName | typeof END {
   if (!state.planApproved) {
-    console.log("[Router] Plan rejected, ending workflow");
+    logger.info("Router", "Plan rejected, ending workflow");
     return END;
   }
   return NODES.quizGenerator;
@@ -60,11 +60,11 @@ function afterApproval(state: LearningState): NodeName | typeof END {
  */
 function afterQuizGenerator(state: LearningState): NodeName {
   if (state.error) {
-    console.log("[Router] Quiz generation had an error, moving to summary");
+    logger.info("Router", "Quiz generation had an error, moving to summary");
     return NODES.summary;
   }
   if (!state.mcqs || state.mcqs.length === 0) {
-    console.log("[Router] No MCQs generated, moving to summary");
+    logger.info("Router", "No MCQs generated, moving to summary");
     return NODES.summary;
   }
   return NODES.feedback;
@@ -77,6 +77,7 @@ function afterFeedback(state: LearningState): NodeName {
   const { mcqs, currentMcqIdx, learningObjectives, currentObjectiveIdx, userAnswers } = state;
 
   if (!mcqs || !learningObjectives) {
+    logger.info("Router", "Missing MCQs or objectives, moving to summary");
     return NODES.summary;
   }
 
@@ -85,25 +86,27 @@ function afterFeedback(state: LearningState): NodeName {
     const currentMcq = mcqs[currentMcqIdx];
     if (currentMcq) {
       const userAnswer = userAnswers[currentMcq.id];
-      if (userAnswer === currentMcq.correctAnswer) {
-        if (currentMcqIdx + 1 < mcqs.length) {
-          return NODES.feedback;
-        }
-      } else if (userAnswer !== undefined) {
-        return NODES.feedback;
-      } else {
+      const isCorrect = userAnswer === currentMcq.correctAnswer;
+      const hasMoreQuestions = currentMcqIdx + 1 < mcqs.length;
+
+      // Only fall through to objective check if answered correctly AND no more questions
+      if (!isCorrect || hasMoreQuestions) {
         return NODES.feedback;
       }
     }
   }
 
-  // Check if there are more objectives
-  if (currentObjectiveIdx + 1 < learningObjectives.length) {
-    console.log("[Router] Moving to next objective");
+  // Check if there are more objectives that need questions generated
+  const currentObjective = learningObjectives[currentObjectiveIdx];
+  const hasQuestionsForCurrentObjective =
+    currentObjective && mcqs.some((m) => m.objectiveId === currentObjective.id);
+
+  if (currentObjectiveIdx < learningObjectives.length && !hasQuestionsForCurrentObjective) {
+    logger.info("Router", "Moving to next objective");
     return NODES.quizGenerator;
   }
 
-  console.log("[Router] All objectives completed, moving to summary");
+  logger.info("Router", "All objectives completed, moving to summary");
   return NODES.summary;
 }
 
@@ -115,6 +118,7 @@ function afterFeedback(state: LearningState): NodeName {
 function buildGraph() {
   // Type assertion necessary due to LangGraph.js type definitions
   // This is a known limitation and the recommended approach
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const builder = new StateGraph(LearningStateAnnotation) as any;
 
   // Add all nodes

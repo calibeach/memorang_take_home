@@ -96,11 +96,12 @@ export function validateConfig(): void {
  */
 export function getConfigValue<T>(path: string, defaultValue?: T): T {
   const keys = path.split(".");
-  let value: any = CONFIG;
+  let value: Record<string, unknown> | unknown = CONFIG;
 
   for (const key of keys) {
-    value = value?.[key];
-    if (value === undefined) {
+    if (value && typeof value === "object" && key in value) {
+      value = (value as Record<string, unknown>)[key];
+    } else {
       return defaultValue as T;
     }
   }

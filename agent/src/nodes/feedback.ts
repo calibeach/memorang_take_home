@@ -50,7 +50,7 @@ export async function feedbackNode(state: LearningState): Promise<Partial<Learni
     if (learningObjectives && currentObjectiveIdx + 1 < learningObjectives.length) {
       logAgentSuccess(
         "Feedback",
-        `Moving to next objective: ${currentObjectiveIdx} -> ${currentObjectiveIdx + 1}`
+        `Moving to next objective: ${currentObjectiveIdx + 1} -> ${currentObjectiveIdx + 2}`
       );
       logger.endSection();
       return {
@@ -88,7 +88,7 @@ export async function feedbackNode(state: LearningState): Promise<Partial<Learni
       ) {
         logAgentSuccess(
           "Feedback",
-          `Completed objective ${currentObjectiveIdx}, moving to ${currentObjectiveIdx + 1}`
+          `Completed objective ${currentObjectiveIdx + 1}, moving to ${currentObjectiveIdx + 2}`
         );
         logger.endSection();
         return {
@@ -148,7 +148,7 @@ export async function feedbackNode(state: LearningState): Promise<Partial<Learni
       ) {
         logAgentSuccess(
           "Feedback",
-          `Completed objective ${currentObjectiveIdx} after correct answer, moving to ${currentObjectiveIdx + 1}`
+          `Completed objective ${currentObjectiveIdx + 1} after correct answer, moving to ${currentObjectiveIdx + 2}`
         );
         logger.endSection();
         return {
