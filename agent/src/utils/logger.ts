@@ -4,6 +4,11 @@
 
 import chalk from "chalk";
 
+/**
+ * Type for loggable data - JSON-serializable values
+ */
+type LogData = Record<string, unknown> | unknown[] | string | number | boolean | null;
+
 export enum LogLevel {
   DEBUG = "DEBUG",
   INFO = "INFO",
@@ -18,7 +23,7 @@ interface LogEntry {
   agent: string;
   level: LogLevel;
   message: string;
-  data?: any;
+  data?: LogData;
   timestamp?: Date;
 }
 
@@ -83,7 +88,7 @@ class AgentLogger {
     }
   }
 
-  private formatData(data: any): string {
+  private formatData(data: LogData): string {
     if (!data) return "";
 
     const indent = "  ".repeat(this.indentLevel + 1);
@@ -129,31 +134,31 @@ class AgentLogger {
   }
 
   // Convenience methods for different log levels
-  debug(agent: string, message: string, data?: any): void {
+  debug(agent: string, message: string, data?: LogData): void {
     this.log({ agent, level: LogLevel.DEBUG, message, data });
   }
 
-  info(agent: string, message: string, data?: any): void {
+  info(agent: string, message: string, data?: LogData): void {
     this.log({ agent, level: LogLevel.INFO, message, data });
   }
 
-  think(agent: string, message: string, data?: any): void {
+  think(agent: string, message: string, data?: LogData): void {
     this.log({ agent, level: LogLevel.THINK, message, data });
   }
 
-  decision(agent: string, message: string, data?: any): void {
+  decision(agent: string, message: string, data?: LogData): void {
     this.log({ agent, level: LogLevel.DECISION, message, data });
   }
 
-  success(agent: string, message: string, data?: any): void {
+  success(agent: string, message: string, data?: LogData): void {
     this.log({ agent, level: LogLevel.SUCCESS, message, data });
   }
 
-  warning(agent: string, message: string, data?: any): void {
+  warning(agent: string, message: string, data?: LogData): void {
     this.log({ agent, level: LogLevel.WARNING, message, data });
   }
 
-  error(agent: string, message: string, data?: any): void {
+  error(agent: string, message: string, data?: LogData): void {
     this.log({ agent, level: LogLevel.ERROR, message, data });
   }
 }
@@ -162,19 +167,19 @@ class AgentLogger {
 export const logger = new AgentLogger();
 
 // Export convenience functions
-export function logAgentThinking(agent: string, thought: string, details?: any): void {
+export function logAgentThinking(agent: string, thought: string, details?: LogData): void {
   logger.think(agent, thought, details);
 }
 
-export function logAgentDecision(agent: string, decision: string, reasoning?: any): void {
+export function logAgentDecision(agent: string, decision: string, reasoning?: LogData): void {
   logger.decision(agent, decision, reasoning);
 }
 
-export function logAgentSuccess(agent: string, achievement: string, result?: any): void {
+export function logAgentSuccess(agent: string, achievement: string, result?: LogData): void {
   logger.success(agent, achievement, result);
 }
 
-export function logAgentError(agent: string, error: string, details?: any): void {
+export function logAgentError(agent: string, error: string, details?: LogData): void {
   logger.error(agent, error, details);
 }
 
