@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm build:*)",
+      "Bash(find:*)",
+      "Bash(pnpm install)",
+      "Bash(pnpm --filter agent build:*)",
+      "Bash(pnpm build:agent:*)",
+      "Bash(pnpm test:*)",
+      "mcp__docs-langchain__SearchDocsByLangChain"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

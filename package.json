@@ -1,0 +1,54 @@
+{
+  "name": "memorang-learning-agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AI learning agent that transforms PDFs into interactive lessons",
+  "scripts": {
+    "dev": "pnpm run --parallel dev",
+    "dev:agent": "pnpm --filter agent dev",
+    "dev:ui": "pnpm --filter ui dev",
+    "build": "pnpm run -r build",
+    "test": "pnpm run -r test",
+    "test:watch": "pnpm run --parallel test:watch",
+    "test:coverage": "pnpm run -r test:coverage",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky"
+  },
+  "keywords": [
+    "langgraph",
+    "copilotkit",
+    "ai",
+    "learning",
+    "mcq"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^9.16.0",
+    "@next/eslint-plugin-next": "^14.2.21",
+    "@vitest/coverage-v8": "^2.1.8",
+    "eslint": "^9.16.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "globals": "^15.13.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.10",
+    "prettier": "^3.4.2",
+    "typescript-eslint": "^8.17.0",
+    "vitest": "^2.1.8"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{js,jsx,json,md,css}": [
+      "prettier --write"
+    ]
+  }
+}
