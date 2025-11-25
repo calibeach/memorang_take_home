@@ -9,6 +9,7 @@ interface MCQPanelProps {
   question: MCQ;
   currentIndex: number;
   totalQuestions: number;
+  objectiveTitle?: string;
   onAnswer: (answer: number) => void;
   onContinue: () => void;
   onRetry: () => void;
@@ -20,6 +21,7 @@ export function MCQPanel({
   question,
   currentIndex,
   totalQuestions,
+  objectiveTitle,
   onAnswer,
   onContinue,
   onRetry,
@@ -59,7 +61,7 @@ export function MCQPanel({
   }, [onRetry]);
 
   const getOptionClass = (index: number) => {
-    const base = "mcq-option flex items-center gap-3";
+    const base = "mcq-option flex items-center gap-3 w-full";
 
     // If we have feedback, show correct/incorrect highlighting
     if (answerFeedback) {
@@ -98,6 +100,11 @@ export function MCQPanel({
   return (
     <div className="flex flex-col h-full p-6 overflow-auto">
       <div className="max-w-2xl mx-auto w-full">
+        {/* Objective title */}
+        {objectiveTitle && (
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">{objectiveTitle}</h1>
+        )}
+
         {/* Progress bar */}
         <ProgressBar
           value={currentIndex}

@@ -59,12 +59,14 @@ export function LearningContent() {
         />
       );
 
-    case "quiz":
+    case "quiz": {
+      const currentObjective = objectives?.find((obj) => obj.id === currentMcq?.objectiveId);
       return currentMcq ? (
         <MCQPanel
           question={currentMcq}
           currentIndex={mcqIndex}
           totalQuestions={totalMcqs}
+          objectiveTitle={currentObjective?.title}
           onAnswer={handleAnswer}
           onContinue={handleContinue}
           onRetry={handleRetry}
@@ -74,6 +76,7 @@ export function LearningContent() {
       ) : (
         <LoadingState message="Loading question..." />
       );
+    }
 
     case "summary":
       return progressReport ? (
