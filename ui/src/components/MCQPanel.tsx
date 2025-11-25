@@ -63,7 +63,8 @@ export function MCQPanel({
 
     // If we have feedback, show correct/incorrect highlighting
     if (answerFeedback) {
-      if (index === answerFeedback.correctAnswer) {
+      // Only show correct answer (green) when user got it right
+      if (index === answerFeedback.correctAnswer && answerFeedback.isCorrect) {
         return classNames(base, "correct");
       }
       if (index === answerFeedback.selectedAnswer && !answerFeedback.isCorrect) {
@@ -79,7 +80,8 @@ export function MCQPanel({
     const base = "w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0";
 
     if (answerFeedback) {
-      if (index === answerFeedback.correctAnswer) {
+      // Only show correct answer (green) when user got it right
+      if (index === answerFeedback.correctAnswer && answerFeedback.isCorrect) {
         return `${base} border-green-500 bg-green-500`;
       }
       if (index === answerFeedback.selectedAnswer && !answerFeedback.isCorrect) {
