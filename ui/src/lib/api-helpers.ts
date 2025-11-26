@@ -2,6 +2,14 @@
  * API helper functions for consistent error handling and request processing
  */
 
+/** Structured error details from API responses */
+export interface ApiErrorDetails {
+  field?: string;
+  code?: string;
+  validationErrors?: Array<{ field: string; message: string }>;
+  [key: string]: unknown;
+}
+
 /**
  * Custom API Error class
  */
@@ -9,7 +17,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public statusCode: number,
-    public details?: any
+    public details?: ApiErrorDetails
   ) {
     super(message);
     this.name = "ApiError";
@@ -22,12 +30,12 @@ export class ApiError extends Error {
 export async function handleApiResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let errorMessage = `Request failed with status ${response.status}`;
-    let errorDetails: any = undefined;
+    let errorDetails: ApiErrorDetails | undefined = undefined;
 
     try {
       const errorData = await response.json();
       errorMessage = errorData.error || errorData.message || errorMessage;
-      errorDetails = errorData.details;
+      errorDetails = errorData.details as ApiErrorDetails | undefined;
     } catch {
       // If JSON parsing fails, use default error message
     }
@@ -77,13 +85,13 @@ export async function retryableRequest<T>(
   options: {
     maxRetries?: number;
     delay?: number;
-    shouldRetry?: (error: any) => boolean;
+    shouldRetry?: (error: unknown) => boolean;
   } = {}
 ): Promise<T> {
   const {
     maxRetries = 3,
     delay = 1000,
-    shouldRetry = (error) => {
+    shouldRetry = (error: unknown) => {
       if (error instanceof ApiError) {
         // Retry on 5xx errors or network errors
         return error.statusCode >= 500 || error.statusCode === 0;
@@ -92,7 +100,7 @@ export async function retryableRequest<T>(
     },
   } = options;
 
-  let lastError: any;
+  let lastError: unknown;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {

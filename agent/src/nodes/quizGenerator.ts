@@ -1,4 +1,4 @@
-import { MCQBatchSchema, type MCQ } from "../schemas/index.js";
+import { MCQBatchSchema, type MCQ, type LearningObjective } from "../schemas/index.js";
 import type { LearningState } from "../state.js";
 import {
   logger,
@@ -8,15 +8,101 @@ import {
   logAgentError,
 } from "../utils/logger.js";
 import { AIModelFactory, ContentProcessor, NodeResponse } from "../services/index.js";
+import { prefetchCache } from "../utils/prefetchCache.js";
+
+const QUESTIONS_PER_OBJECTIVE = 3;
+
+/**
+ * Helper function to generate MCQs for a specific objective.
+ * Extracted to enable reuse for prefetching.
+ */
+async function generateQuestionsForObjective(
+  objective: LearningObjective,
+  pdfContent: string,
+  agentLabel: string = "Quiz Generator"
+): Promise<MCQ[]> {
+  const structuredModel = AIModelFactory.createStructured("quiz", MCQBatchSchema, "generate_mcqs");
+
+  const { content: truncatedContent } = ContentProcessor.truncate(pdfContent, "quiz", agentLabel);
+
+  const mcqBatch = await structuredModel.invoke([
+    {
+      role: "system",
+      content: `You are an expert quiz creator. Generate multiple choice questions to test understanding of a specific learning objective.
+
+Requirements:
+1. Create exactly ${QUESTIONS_PER_OBJECTIVE} questions for the given objective
+2. Each question must have exactly 4 options (A, B, C, D)
+3. Only ONE option should be correct
+4. Options should be plausible (no obviously wrong answers)
+5. Provide a helpful hint that guides without revealing the answer
+6. Provide a clear explanation of why the correct answer is right
+
+Guidelines for good MCQs:
+- Questions should directly test the learning objective
+- Avoid "all of the above" or "none of the above"
+- Keep questions clear and unambiguous
+- Hints should encourage critical thinking
+- Explanations should teach, not just state the answer`,
+    },
+    {
+      role: "user",
+      content: `Based on this document content:
+---
+${truncatedContent}
+---
+
+Generate ${QUESTIONS_PER_OBJECTIVE} multiple choice questions for this learning objective:
+Title: ${objective.title}
+Description: ${objective.description}
+Difficulty: ${objective.difficulty}
+Objective ID: ${objective.id}`,
+    },
+  ]);
+
+  // Add IDs to questions
+  const questionsWithIds: MCQ[] = mcqBatch.questions.map(
+    (q: Omit<MCQ, "id" | "objectiveId">, idx: number) => ({
+      ...q,
+      id: `${objective.id}-q${idx + 1}`,
+      objectiveId: objective.id,
+    })
+  );
+
+  // Validate correct answers
+  for (const q of questionsWithIds) {
+    if (q.correctAnswer < 0 || q.correctAnswer > 3) {
+      q.correctAnswer = 0;
+    }
+  }
+
+  return questionsWithIds;
+}
+
+/**
+ * Get a unique session key for prefetch caching.
+ * Uses the first learning objective's ID as it's unique per session.
+ */
+function getSessionKey(learningObjectives: LearningObjective[]): string {
+  return learningObjectives[0]?.id || "default";
+}
 
 /**
  * Node that generates MCQs for the current learning objective.
  * Creates 3 questions per objective with hints and explanations.
+ * Also prefetches the next objective's questions in the background.
  */
 export async function quizGeneratorNode(state: LearningState): Promise<Partial<LearningState>> {
   logger.startSection("Quiz Generator Agent");
 
-  const { pdfContent, learningObjectives, currentObjectiveIdx, mcqs: existingMcqs } = state;
+  const {
+    pdfContent,
+    learningObjectives,
+    currentObjectiveIdx,
+    mcqs: existingMcqs,
+    prefetchedMcqs,
+    prefetchObjectiveIdx,
+  } = state;
 
   logAgentThinking("Quiz Generator", "Checking learning objectives availability");
 
@@ -50,130 +136,81 @@ export async function quizGeneratorNode(state: LearningState): Promise<Partial<L
     objectiveId: currentObjective.id,
     difficulty: currentObjective.difficulty,
     existingMcqs: existingMcqs?.length || 0,
+    hasPrefetch: prefetchObjectiveIdx === currentObjectiveIdx && prefetchedMcqs.length > 0,
   });
 
+  // Calculate total expected MCQs upfront
+  const totalExpectedMcqs = learningObjectives.length * QUESTIONS_PER_OBJECTIVE;
+
   try {
-    logAgentThinking("Quiz Generator", "Initializing AI model for MCQ generation", {
-      model: "gpt-4o-mini",
-      temperature: 0.5,
-      questionsPerObjective: 3,
-    });
+    let questionsForCurrent: MCQ[];
 
-    // Use AIModelFactory for structured output
-    const structuredModel = AIModelFactory.createStructured(
-      "quiz",
-      MCQBatchSchema,
-      "generate_mcqs"
-    );
+    // Check if we have prefetched questions for this objective
+    if (prefetchObjectiveIdx === currentObjectiveIdx && prefetchedMcqs.length > 0) {
+      logAgentSuccess("Quiz Generator", "Using prefetched questions (instant!)", {
+        objectiveIdx: currentObjectiveIdx,
+        questionCount: prefetchedMcqs.length,
+      });
+      questionsForCurrent = prefetchedMcqs;
+    } else {
+      // Generate questions normally
+      logAgentThinking("Quiz Generator", "Generating questions (no prefetch available)", {
+        model: "gpt-4o-mini",
+        questionsPerObjective: QUESTIONS_PER_OBJECTIVE,
+      });
 
-    // Use ContentProcessor for truncation
-    const { content: truncatedContent } = ContentProcessor.truncate(
-      pdfContent,
-      "quiz",
-      "Quiz Generator"
-    );
-
-    logAgentThinking("Quiz Generator", "Designing quiz questions strategy");
-    logger.indent();
-    logger.think("Quiz Generator", "Creating questions that test comprehension, not memorization");
-    logger.think("Quiz Generator", "Ensuring distractors are plausible but incorrect");
-    logger.think("Quiz Generator", "Formulating hints that guide without revealing answers");
-    logger.think("Quiz Generator", "Writing explanations that teach the concept");
-    logger.outdent();
-
-    logger.info("Quiz Generator", "Requesting MCQ generation from AI model");
-
-    const mcqBatch = await structuredModel.invoke([
-      {
-        role: "system",
-        content: `You are an expert quiz creator. Generate multiple choice questions to test understanding of a specific learning objective.
-
-Requirements:
-1. Create exactly 3 questions for the given objective
-2. Each question must have exactly 4 options (A, B, C, D)
-3. Only ONE option should be correct
-4. Options should be plausible (no obviously wrong answers)
-5. Provide a helpful hint that guides without revealing the answer
-6. Provide a clear explanation of why the correct answer is right
-
-Guidelines for good MCQs:
-- Questions should directly test the learning objective
-- Avoid "all of the above" or "none of the above"
-- Keep questions clear and unambiguous
-- Hints should encourage critical thinking
-- Explanations should teach, not just state the answer`,
-      },
-      {
-        role: "user",
-        content: `Based on this document content:
----
-${truncatedContent}
----
-
-Generate 3 multiple choice questions for this learning objective:
-Title: ${currentObjective.title}
-Description: ${currentObjective.description}
-Difficulty: ${currentObjective.difficulty}
-Objective ID: ${currentObjective.id}`,
-      },
-    ]);
-
-    logAgentSuccess("Quiz Generator", "AI model returned MCQ batch");
-
-    // Validate and ensure IDs
-    logAgentThinking("Quiz Generator", "Processing and validating generated questions");
-
-    const questionsWithIds: MCQ[] = mcqBatch.questions.map(
-      (q: Omit<MCQ, "id" | "objectiveId">, idx: number) => ({
-        ...q,
-        id: `${currentObjective.id}-q${idx + 1}`,
-        objectiveId: currentObjective.id,
-      })
-    );
-
-    // Validate that each question has correct answer in valid range
-    logger.indent();
-    for (let i = 0; i < questionsWithIds.length; i++) {
-      const q = questionsWithIds[i];
-
-      logAgentThinking(
-        "Quiz Generator",
-        `Validating question ${i + 1}: "${q.question.substring(0, 50)}..."`,
-        {
-          optionsCount: q.options.length,
-          correctAnswer: q.correctAnswer,
-        }
+      questionsForCurrent = await generateQuestionsForObjective(
+        currentObjective,
+        pdfContent,
+        "Quiz Generator"
       );
 
-      if (q.correctAnswer < 0 || q.correctAnswer > 3) {
-        logAgentDecision("Quiz Generator", `Fixing invalid correct answer index`, {
-          originalIndex: q.correctAnswer,
-          fixedIndex: 0,
-        });
-        q.correctAnswer = 0;
-      }
-      if (q.options.length !== 4) {
-        logger.warning("Quiz Generator", `Invalid options count`, {
-          expected: 4,
-          actual: q.options.length,
-        });
-      }
+      logAgentSuccess("Quiz Generator", `Generated ${questionsForCurrent.length} MCQs`);
     }
-    logger.outdent();
 
-    logAgentSuccess("Quiz Generator", `Generated ${questionsWithIds.length} valid MCQs`, {
+    // Fire prefetch for NEXT objective (fire-and-forget)
+    const nextIdx = currentObjectiveIdx + 1;
+    if (nextIdx < learningObjectives.length) {
+      const nextObjective = learningObjectives[nextIdx];
+      const sessionKey = getSessionKey(learningObjectives);
+
+      logAgentThinking("Quiz Generator", "Starting background prefetch for next objective", {
+        nextObjectiveIdx: nextIdx,
+        nextObjectiveTitle: nextObjective.title,
+      });
+
+      // Start prefetch but don't await - let it run in background
+      const prefetchPromise = generateQuestionsForObjective(
+        nextObjective,
+        pdfContent,
+        "Quiz Generator (Prefetch)"
+      );
+
+      // Store promise in cache for feedback node to await later
+      prefetchCache.set(sessionKey, {
+        promise: prefetchPromise,
+        objectiveIdx: nextIdx,
+      });
+    }
+
+    logAgentSuccess("Quiz Generator", `Ready with ${questionsForCurrent.length} MCQs`, {
       objectiveTitle: currentObjective.title,
-      questionIds: questionsWithIds.map((q: MCQ) => q.id),
-      totalMcqsNow: (existingMcqs?.length || 0) + questionsWithIds.length,
+      questionIds: questionsForCurrent.map((q: MCQ) => q.id),
+      totalMcqsNow: (existingMcqs?.length || 0) + questionsForCurrent.length,
+      totalExpected: totalExpectedMcqs,
     });
 
     logger.endSection();
 
     return {
-      mcqs: [...(existingMcqs || []), ...questionsWithIds],
+      mcqs: [...(existingMcqs || []), ...questionsForCurrent],
       currentMcqIdx: existingMcqs?.length || 0,
+      totalExpectedMcqs,
       currentPhase: "quiz",
       error: null,
+      // Clear prefetch state since we used it (or didn't have any)
+      prefetchedMcqs: [],
+      prefetchObjectiveIdx: -1,
     };
   } catch (err) {
     const errorMessage = NodeResponse.extractErrorMessage(err);

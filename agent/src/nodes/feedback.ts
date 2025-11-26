@@ -8,6 +8,46 @@ import {
   logAgentError,
 } from "../utils/logger.js";
 import { NodeResponse } from "../services/index.js";
+import { prefetchCache } from "../utils/prefetchCache.js";
+import type { MCQ } from "../schemas/index.js";
+
+const QUESTIONS_PER_OBJECTIVE = 3;
+
+/**
+ * Helper to get session key (must match quizGenerator)
+ */
+function getSessionKey(learningObjectives: { id: string }[]): string {
+  return learningObjectives[0]?.id || "default";
+}
+
+/**
+ * Resolve prefetched questions if available for the next objective.
+ * Returns the prefetched MCQs or empty array if not available/failed.
+ */
+async function resolvePrefetch(
+  sessionKey: string,
+  nextObjectiveIdx: number
+): Promise<{ mcqs: MCQ[]; objectiveIdx: number } | null> {
+  const cached = prefetchCache.get(sessionKey);
+
+  if (!cached || cached.objectiveIdx !== nextObjectiveIdx) {
+    return null;
+  }
+
+  try {
+    logAgentThinking("Feedback", "Awaiting prefetched questions...");
+    const mcqs = await cached.promise;
+    logAgentSuccess("Feedback", `Prefetch resolved with ${mcqs.length} questions`);
+    prefetchCache.delete(sessionKey); // Clean up
+    return { mcqs, objectiveIdx: nextObjectiveIdx };
+  } catch (error) {
+    logAgentError("Feedback", "Prefetch failed, will generate on-demand", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    prefetchCache.delete(sessionKey); // Clean up failed entry
+    return null;
+  }
+}
 
 /**
  * Node that handles quiz interaction - waits for user answers and provides feedback.
@@ -48,14 +88,24 @@ export async function feedbackNode(state: LearningState): Promise<Partial<Learni
 
     // Check if we should move to the next objective
     if (learningObjectives && currentObjectiveIdx + 1 < learningObjectives.length) {
+      const nextIdx = currentObjectiveIdx + 1;
       logAgentSuccess(
         "Feedback",
-        `Moving to next objective: ${currentObjectiveIdx + 1} -> ${currentObjectiveIdx + 2}`
+        `Moving to next objective: ${currentObjectiveIdx + 1} -> ${nextIdx + 1}`
       );
+
+      // Resolve prefetch if available
+      const sessionKey = getSessionKey(learningObjectives);
+      const prefetchResult = await resolvePrefetch(sessionKey, nextIdx);
+
       logger.endSection();
       return {
-        currentObjectiveIdx: currentObjectiveIdx + 1,
+        currentObjectiveIdx: nextIdx,
         currentPhase: "quiz", // Will trigger quizGenerator for next objective
+        ...(prefetchResult && {
+          prefetchedMcqs: prefetchResult.mcqs,
+          prefetchObjectiveIdx: prefetchResult.objectiveIdx,
+        }),
       };
     }
 
@@ -86,14 +136,24 @@ export async function feedbackNode(state: LearningState): Promise<Partial<Learni
         learningObjectives &&
         currentObjectiveIdx + 1 < learningObjectives.length
       ) {
+        const nextIdx = currentObjectiveIdx + 1;
         logAgentSuccess(
           "Feedback",
-          `Completed objective ${currentObjectiveIdx + 1}, moving to ${currentObjectiveIdx + 2}`
+          `Completed objective ${currentObjectiveIdx + 1}, moving to ${nextIdx + 1}`
         );
+
+        // Resolve prefetch if available
+        const sessionKey = getSessionKey(learningObjectives);
+        const prefetchResult = await resolvePrefetch(sessionKey, nextIdx);
+
         logger.endSection();
         return {
           currentMcqIdx: currentMcqIdx + 1,
-          currentObjectiveIdx: currentObjectiveIdx + 1,
+          currentObjectiveIdx: nextIdx,
+          ...(prefetchResult && {
+            prefetchedMcqs: prefetchResult.mcqs,
+            prefetchObjectiveIdx: prefetchResult.objectiveIdx,
+          }),
         };
       }
     }
@@ -105,6 +165,11 @@ export async function feedbackNode(state: LearningState): Promise<Partial<Learni
   }
 
   // Wait for user answer using interrupt - include full MCQ data for feedback
+  // Calculate total directly from learningObjectives - more reliable than state field
+  const calculatedTotalMcqs = learningObjectives
+    ? learningObjectives.length * QUESTIONS_PER_OBJECTIVE
+    : 0;
+
   const userInput = interrupt({
     type: "answer_mcq",
     questionId: currentMcq.id,
@@ -114,7 +179,7 @@ export async function feedbackNode(state: LearningState): Promise<Partial<Learni
     hint: currentMcq.hint,
     explanation: currentMcq.explanation,
     currentIndex: currentMcqIdx,
-    totalQuestions: mcqs.length,
+    totalQuestions: calculatedTotalMcqs || mcqs.length, // Fallback to mcqs.length if calculation fails
   });
 
   // Process the user's answer
@@ -146,16 +211,26 @@ export async function feedbackNode(state: LearningState): Promise<Partial<Learni
         learningObjectives &&
         currentObjectiveIdx + 1 < learningObjectives.length
       ) {
+        const nextIdx = currentObjectiveIdx + 1;
         logAgentSuccess(
           "Feedback",
-          `Completed objective ${currentObjectiveIdx + 1} after correct answer, moving to ${currentObjectiveIdx + 2}`
+          `Completed objective ${currentObjectiveIdx + 1} after correct answer, moving to ${nextIdx + 1}`
         );
+
+        // Resolve prefetch if available
+        const sessionKey = getSessionKey(learningObjectives);
+        const prefetchResult = await resolvePrefetch(sessionKey, nextIdx);
+
         logger.endSection();
         return {
           userAnswers: newUserAnswers,
           correctAnswers: correctAnswers + 1,
           currentMcqIdx: currentMcqIdx + 1,
-          currentObjectiveIdx: currentObjectiveIdx + 1,
+          currentObjectiveIdx: nextIdx,
+          ...(prefetchResult && {
+            prefetchedMcqs: prefetchResult.mcqs,
+            prefetchObjectiveIdx: prefetchResult.objectiveIdx,
+          }),
         };
       }
     }

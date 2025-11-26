@@ -180,7 +180,7 @@ export class ApiClient {
   cancelAllRequests(): void {
     // In a production app, we'd track all active controllers
     // For now, this is a placeholder for the pattern
-    console.log("Cancelling all pending requests");
+    console.warn("Cancelling all pending requests");
   }
 }
 

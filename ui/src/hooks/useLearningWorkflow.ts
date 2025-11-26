@@ -76,12 +76,14 @@ export function useLearningWorkflow() {
       }
 
       // Update MCQs if available
+      // Note: Don't pass total here - it's already set correctly by the interrupt handler
+      // using data.totalQuestions which includes ALL questions across ALL objectives
       if (responseState.mcqs) {
         const mcqs = responseState.mcqs as MCQ[];
         const currentIdx =
           typeof responseState.currentMcqIdx === "number" ? responseState.currentMcqIdx : 0;
         if (mcqs[currentIdx]) {
-          actions.setMcq(mcqs[currentIdx], currentIdx, mcqs.length);
+          actions.setMcq(mcqs[currentIdx], currentIdx);
         }
       }
     },

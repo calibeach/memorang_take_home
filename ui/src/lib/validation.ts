@@ -114,7 +114,7 @@ export function isInRange(value: number, min: number, max: number): boolean {
 /**
  * Validate required fields in an object
  */
-export function validateRequired<T extends Record<string, any>>(
+export function validateRequired<T extends Record<string, unknown>>(
   obj: T,
   fields: (keyof T)[]
 ): { valid: boolean; missing: string[] } {

@@ -29,13 +29,13 @@ export function formatProgressDisplay(current: number, total: number): string {
 /**
  * Debounce function for performance
  */
-export function debounce<T extends (...args: any[]) => any>(
-  func: T,
+export function debounce<Args extends unknown[], Return>(
+  func: (...args: Args) => Return,
   wait: number
-): (...args: Parameters<T>) => void {
+): (...args: Args) => void {
   let timeout: NodeJS.Timeout | null = null;
 
-  return function executedFunction(...args: Parameters<T>) {
+  return function executedFunction(...args: Args) {
     const later = () => {
       timeout = null;
       func(...args);
@@ -51,13 +51,13 @@ export function debounce<T extends (...args: any[]) => any>(
 /**
  * Throttle function for rate limiting
  */
-export function throttle<T extends (...args: any[]) => any>(
-  func: T,
+export function throttle<Args extends unknown[], Return>(
+  func: (...args: Args) => Return,
   limit: number
-): (...args: Parameters<T>) => void {
+): (...args: Args) => void {
   let inThrottle: boolean;
 
-  return function executedFunction(...args: Parameters<T>) {
+  return function executedFunction(...args: Args) {
     if (!inThrottle) {
       func(...args);
       inThrottle = true;
@@ -99,8 +99,8 @@ export function generateClientId(prefix = "client"): string {
  */
 export function deepClone<T>(obj: T): T {
   if (obj === null || typeof obj !== "object") return obj;
-  if (obj instanceof Date) return new Date(obj.getTime()) as any;
-  if (obj instanceof Array) return obj.map((item) => deepClone(item)) as any;
+  if (obj instanceof Date) return new Date(obj.getTime()) as unknown as T;
+  if (obj instanceof Array) return obj.map((item) => deepClone(item)) as unknown as T;
 
   const cloned = {} as T;
   for (const key in obj) {
@@ -114,7 +114,7 @@ export function deepClone<T>(obj: T): T {
 /**
  * Check if value is empty (null, undefined, empty string, empty array, empty object)
  */
-export function isEmpty(value: any): boolean {
+export function isEmpty(value: unknown): boolean {
   if (value == null) return true;
   if (typeof value === "string") return value.trim().length === 0;
   if (Array.isArray(value)) return value.length === 0;
@@ -136,7 +136,7 @@ export const storage = {
     }
   },
 
-  set(key: string, value: any): boolean {
+  set<T>(key: string, value: T): boolean {
     if (typeof window === "undefined") return false;
     try {
       window.localStorage.setItem(key, JSON.stringify(value));
