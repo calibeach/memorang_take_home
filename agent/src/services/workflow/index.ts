@@ -1,2 +1,9 @@
-export { InterruptHandler, type InterruptResult } from "./InterruptHandler.js";
+export {
+  InterruptHandler,
+  type InterruptResult,
+  type TypedInterruptResult,
+  type InterruptPayload,
+  type PlanApprovalInterrupt,
+  type AnswerMCQInterrupt,
+} from "./InterruptHandler.js";
 export { NodeResponse } from "./NodeResponse.js";

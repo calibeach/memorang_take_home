@@ -1,3 +1,12 @@
+import {
+  isPlanApprovalInterrupt,
+  isAnswerMCQInterrupt,
+  isKnownInterrupt,
+  type InterruptPayload,
+  type PlanApprovalInterrupt,
+  type AnswerMCQInterrupt,
+} from "../../types/interrupts.js";
+
 interface TaskWithInterrupts {
   interrupts?: unknown[];
 }
@@ -5,6 +14,14 @@ interface TaskWithInterrupts {
 export interface InterruptResult {
   isInterrupted: boolean;
   interruptData: unknown | null;
+}
+
+/**
+ * Typed interrupt result when the interrupt is a known type.
+ */
+export interface TypedInterruptResult<T extends InterruptPayload> {
+  isInterrupted: true;
+  interruptData: T;
 }
 
 /**
@@ -41,4 +58,28 @@ export class InterruptHandler {
       interruptData: this.getInterruptData(tasks),
     };
   }
+
+  /**
+   * Type guard: Check if interrupt is a plan approval.
+   */
+  static isPlanApproval(data: unknown): data is PlanApprovalInterrupt {
+    return isPlanApprovalInterrupt(data);
+  }
+
+  /**
+   * Type guard: Check if interrupt is an MCQ answer request.
+   */
+  static isAnswerMCQ(data: unknown): data is AnswerMCQInterrupt {
+    return isAnswerMCQInterrupt(data);
+  }
+
+  /**
+   * Type guard: Check if interrupt is a known type.
+   */
+  static isKnownType(data: unknown): data is InterruptPayload {
+    return isKnownInterrupt(data);
+  }
 }
+
+// Re-export types for convenience
+export type { InterruptPayload, PlanApprovalInterrupt, AnswerMCQInterrupt };

@@ -73,6 +73,12 @@ export const LearningStateAnnotation = Annotation.Root({
     default: () => 0,
   }),
 
+  // Track attempt counts per question for dynamic hints
+  attemptCounts: Annotation<Record<string, number>>({
+    reducer: (current, update) => ({ ...current, ...update }),
+    default: () => ({}),
+  }),
+
   // Progress report
   progressReport: Annotation<ProgressReport | null>({
     reducer: (_, update) => update,

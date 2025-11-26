@@ -7,43 +7,60 @@ import {
   logAgentSuccess,
   logAgentError,
 } from "../utils/logger.js";
-import { AIModelFactory, ContentProcessor, NodeResponse } from "../services/index.js";
+import {
+  AIModelFactory,
+  ContentProcessor,
+  NodeResponse,
+  ReflectionService,
+} from "../services/index.js";
 import { prefetchCache } from "../utils/prefetchCache.js";
+import { buildSystemPrompt, type PromptContext } from "../prompts/index.js";
 
 const QUESTIONS_PER_OBJECTIVE = 3;
 
 /**
- * Helper function to generate MCQs for a specific objective.
- * Extracted to enable reuse for prefetching.
+ * Map objective difficulty to prompt context difficulty.
  */
-async function generateQuestionsForObjective(
+function mapDifficulty(
+  difficulty: "easy" | "medium" | "hard"
+): "beginner" | "intermediate" | "advanced" {
+  switch (difficulty) {
+    case "easy":
+      return "beginner";
+    case "medium":
+      return "intermediate";
+    case "hard":
+      return "advanced";
+  }
+}
+
+/**
+ * Type for the raw MCQ batch (before IDs are added).
+ */
+interface RawMCQBatch {
+  questions: Omit<MCQ, "id" | "objectiveId">[];
+}
+
+/**
+ * Raw MCQ generation (without reflection).
+ * Used internally and for building the generate function for reflection.
+ */
+async function generateRawMCQs(
   objective: LearningObjective,
   pdfContent: string,
-  agentLabel: string = "Quiz Generator"
-): Promise<MCQ[]> {
+  promptContext: PromptContext,
+  agentLabel: string
+): Promise<RawMCQBatch> {
   const structuredModel = AIModelFactory.createStructured("quiz", MCQBatchSchema, "generate_mcqs");
-
   const { content: truncatedContent } = ContentProcessor.truncate(pdfContent, "quiz", agentLabel);
+
+  // Build dynamic system prompt
+  const systemPrompt = buildSystemPrompt(promptContext);
 
   const mcqBatch = await structuredModel.invoke([
     {
       role: "system",
-      content: `You are an expert quiz creator. Generate multiple choice questions to test understanding of a specific learning objective.
-
-Requirements:
-1. Create exactly ${QUESTIONS_PER_OBJECTIVE} questions for the given objective
-2. Each question must have exactly 4 options (A, B, C, D)
-3. Only ONE option should be correct
-4. Options should be plausible (no obviously wrong answers)
-5. Provide a helpful hint that guides without revealing the answer
-6. Provide a clear explanation of why the correct answer is right
-
-Guidelines for good MCQs:
-- Questions should directly test the learning objective
-- Avoid "all of the above" or "none of the above"
-- Keep questions clear and unambiguous
-- Hints should encourage critical thinking
-- Explanations should teach, not just state the answer`,
+      content: systemPrompt,
     },
     {
       role: "user",
@@ -60,8 +77,18 @@ Objective ID: ${objective.id}`,
     },
   ]);
 
-  // Add IDs to questions
-  const questionsWithIds: MCQ[] = mcqBatch.questions.map(
+  // Type assertion: the structured model returns data matching our schema
+  return mcqBatch as RawMCQBatch;
+}
+
+/**
+ * Add IDs and validate MCQs.
+ */
+function finalizeQuestions(
+  questions: Omit<MCQ, "id" | "objectiveId">[],
+  objective: LearningObjective
+): MCQ[] {
+  const questionsWithIds: MCQ[] = questions.map(
     (q: Omit<MCQ, "id" | "objectiveId">, idx: number) => ({
       ...q,
       id: `${objective.id}-q${idx + 1}`,
@@ -77,6 +104,57 @@ Objective ID: ${objective.id}`,
   }
 
   return questionsWithIds;
+}
+
+/**
+ * Helper function to generate MCQs for a specific objective.
+ * Uses reflection pattern to critique and refine generated questions.
+ * Extracted to enable reuse for prefetching.
+ */
+async function generateQuestionsForObjective(
+  objective: LearningObjective,
+  pdfContent: string,
+  agentLabel: string = "Quiz Generator",
+  useReflection: boolean = true
+): Promise<MCQ[]> {
+  // Build prompt context for this objective
+  const promptContext: PromptContext = {
+    purpose: "quiz",
+    objectiveDifficulty: mapDifficulty(objective.difficulty),
+    objectiveTitle: objective.title,
+    questionsPerObjective: QUESTIONS_PER_OBJECTIVE,
+  };
+
+  // Get reflection options
+  const reflectionOptions = AIModelFactory.getReflectionOptions();
+  const shouldReflect = useReflection && reflectionOptions.enabled;
+
+  if (shouldReflect) {
+    logAgentThinking(agentLabel, "Using reflection pattern for MCQ generation");
+
+    // Wrap generation with reflection
+    const reflectionResult = await ReflectionService.withReflection(
+      () => generateRawMCQs(objective, pdfContent, promptContext, agentLabel),
+      promptContext,
+      reflectionOptions
+    );
+
+    logAgentSuccess(agentLabel, "Reflection completed", {
+      wasRefined: reflectionResult.wasRefined,
+      iterations: reflectionResult.iterations,
+      clarityScore: reflectionResult.critique?.clarityScore,
+    });
+
+    // Finalize with IDs and validation
+    return finalizeQuestions(
+      reflectionResult.output.questions as Omit<MCQ, "id" | "objectiveId">[],
+      objective
+    );
+  } else {
+    // Generate without reflection
+    const mcqBatch = await generateRawMCQs(objective, pdfContent, promptContext, agentLabel);
+    return finalizeQuestions(mcqBatch.questions, objective);
+  }
 }
 
 /**
