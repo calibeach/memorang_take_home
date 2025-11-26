@@ -36,9 +36,12 @@ export function MCQPanel({
   }, [question.id]);
 
   // When showing feedback, set the selected option to the user's answer
+  // When feedback is cleared (e.g., Continue clicked), also clear selection
   useEffect(() => {
     if (answerFeedback) {
       setSelectedOption(answerFeedback.selectedAnswer);
+    } else {
+      setSelectedOption(null);
     }
   }, [answerFeedback]);
 

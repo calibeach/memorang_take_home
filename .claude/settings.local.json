@@ -11,7 +11,9 @@
       "Bash(pnpm lint:*)",
       "Bash(echo:*)",
       "Bash(pnpm lint:ui:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npm view:*)",
+      "Bash(pnpm test:agent:*)"
     ],
     "deny": [],
     "ask": []

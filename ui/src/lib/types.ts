@@ -45,6 +45,7 @@ export interface LearningState {
 export interface InterruptData {
   type: "approve_plan" | "answer_mcq";
   questionId?: string;
+  objectiveId?: string;
   question?: string;
   options?: string[];
   correctAnswer?: number;
@@ -52,6 +53,7 @@ export interface InterruptData {
   explanation?: string;
   currentIndex?: number;
   totalQuestions?: number;
+  attemptCount?: number;
   plan?: {
     objectives: LearningObjective[];
     estimatedTime: string;
@@ -66,4 +68,5 @@ export interface AnswerFeedback {
   correctAnswer: number;
   hint?: string;
   explanation?: string;
+  attemptCount?: number;
 }

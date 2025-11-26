@@ -10,6 +10,8 @@ import {
 import { NodeResponse } from "../services/index.js";
 import { prefetchCache } from "../utils/prefetchCache.js";
 import type { MCQ } from "../schemas/index.js";
+import type { AnswerMCQInterrupt } from "../types/interrupts.js";
+import { getProgressiveHint } from "../prompts/index.js";
 
 const QUESTIONS_PER_OBJECTIVE = 3;
 
@@ -70,6 +72,7 @@ export async function feedbackNode(state: LearningState): Promise<Partial<Learni
     correctAnswers,
     learningObjectives,
     currentObjectiveIdx,
+    attemptCounts,
   } = state;
 
   if (!mcqs || mcqs.length === 0) {
@@ -170,17 +173,35 @@ export async function feedbackNode(state: LearningState): Promise<Partial<Learni
     ? learningObjectives.length * QUESTIONS_PER_OBJECTIVE
     : 0;
 
-  const userInput = interrupt({
+  // Get current attempt count for this question (starts at 1)
+  const currentAttemptCount = (attemptCounts[currentMcq.id] || 0) + 1;
+
+  // Generate progressive hint based on attempt count
+  // For struggling students, the hint becomes more helpful
+  const dynamicHint = getProgressiveHint(currentMcq.hint, currentAttemptCount);
+
+  // Build typed interrupt payload with dynamic hint
+  const interruptPayload: AnswerMCQInterrupt = {
     type: "answer_mcq",
     questionId: currentMcq.id,
+    objectiveId: currentMcq.objectiveId,
     question: currentMcq.question,
     options: currentMcq.options,
     correctAnswer: currentMcq.correctAnswer,
-    hint: currentMcq.hint,
+    hint: dynamicHint, // Use progressive hint based on attempts
     explanation: currentMcq.explanation,
     currentIndex: currentMcqIdx,
-    totalQuestions: calculatedTotalMcqs || mcqs.length, // Fallback to mcqs.length if calculation fails
+    totalQuestions: calculatedTotalMcqs || mcqs.length,
+    attemptCount: currentAttemptCount,
+  };
+
+  logAgentThinking("Feedback", "Waiting for user answer", {
+    questionId: currentMcq.id,
+    attemptCount: currentAttemptCount,
+    usingProgressiveHint: currentAttemptCount > 1,
   });
+
+  const userInput = interrupt(interruptPayload);
 
   // Process the user's answer
   const userAnswer = typeof userInput === "number" ? userInput : parseInt(userInput as string, 10);
@@ -244,16 +265,21 @@ export async function feedbackNode(state: LearningState): Promise<Partial<Learni
       currentMcqIdx: currentMcqIdx + 1,
     };
   } else {
-    // Incorrect - DON'T store the answer, allow retry
+    // Incorrect - DON'T store the answer, but increment attempt count
     // The frontend will show hint based on the interrupt data
     logAgentThinking("Feedback", "Incorrect answer, allowing retry", {
       questionId: currentMcq.id,
+      attemptCount: currentAttemptCount,
       hint: currentMcq.hint?.substring(0, 50) + "...",
     });
     logger.endSection();
-    // Return empty update - state stays the same, graph will loop back to feedback
-    // and interrupt again for retry
-    return {};
+
+    // Update attempt count for this question
+    return {
+      attemptCounts: {
+        [currentMcq.id]: currentAttemptCount,
+      },
+    };
   }
 }
 

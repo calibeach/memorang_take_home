@@ -63,3 +63,15 @@ export const ProgressReportSchema = z.object({
 });
 
 export type ProgressReport = z.infer<typeof ProgressReportSchema>;
+
+// Re-export reflection schemas
+export {
+  CritiqueSchema,
+  RefinedMCQSchema,
+  RefinedMCQBatchSchema,
+  DEFAULT_REFLECTION_OPTIONS,
+  type Critique,
+  type RefinedMCQ,
+  type RefinedMCQBatch,
+  type ReflectionOptions,
+} from "./reflection.js";

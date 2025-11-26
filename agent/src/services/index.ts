@@ -9,3 +9,6 @@ export { ScoreCalculator, type ScoreResult, type ObjectivePerformance } from "./
 
 // Workflow Services
 export { InterruptHandler, type InterruptResult, NodeResponse } from "./workflow/index.js";
+
+// Reflection Services
+export { ReflectionService, type ReflectionResult } from "./reflection/index.js";
