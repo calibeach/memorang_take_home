@@ -48,6 +48,20 @@ export const LearningStateAnnotation = Annotation.Root({
     reducer: (_, update) => update,
     default: () => 0,
   }),
+  totalExpectedMcqs: Annotation<number>({
+    reducer: (_, update) => update,
+    default: () => 0,
+  }),
+
+  // Pre-fetch state for background question generation
+  prefetchedMcqs: Annotation<MCQ[]>({
+    reducer: (_, update) => update,
+    default: () => [],
+  }),
+  prefetchObjectiveIdx: Annotation<number>({
+    reducer: (_, update) => update,
+    default: () => -1, // -1 means no prefetch available
+  }),
 
   // User answers and scoring
   userAnswers: Annotation<Record<string, number>>({

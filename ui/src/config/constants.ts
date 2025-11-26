@@ -89,19 +89,41 @@ export type UIConfig = typeof UI_CONFIG;
 // Phase type
 export type Phase = (typeof UI_CONFIG.PHASES)[keyof typeof UI_CONFIG.PHASES];
 
-// Helper to get nested config value
-export function getConfig<T>(path: string, defaultValue?: T): T {
+// Utility types for type-safe config access
+type NestedKeyOf<T> = T extends object
+  ? {
+      [K in keyof T]: K extends string
+        ? T[K] extends object
+          ? K | `${K}.${NestedKeyOf<T[K]>}`
+          : K
+        : never;
+    }[keyof T]
+  : never;
+
+type PathValue<T, P extends string> = P extends `${infer K}.${infer Rest}`
+  ? K extends keyof T
+    ? PathValue<T[K], Rest>
+    : never
+  : P extends keyof T
+    ? T[P]
+    : never;
+
+// Helper to get nested config value with type-safe paths
+export function getConfig<P extends NestedKeyOf<UIConfig>>(
+  path: P,
+  defaultValue?: PathValue<UIConfig, P>
+): PathValue<UIConfig, P> {
   const keys = path.split(".");
-  let value: any = UI_CONFIG;
+  let value: unknown = UI_CONFIG;
 
   for (const key of keys) {
-    value = value?.[key];
+    value = (value as Record<string, unknown>)?.[key];
     if (value === undefined) {
-      return defaultValue as T;
+      return defaultValue as PathValue<UIConfig, P>;
     }
   }
 
-  return value as T;
+  return value as PathValue<UIConfig, P>;
 }
 
 // Export individual sections for convenience
