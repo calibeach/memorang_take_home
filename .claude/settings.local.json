@@ -13,7 +13,10 @@
       "Bash(pnpm lint:ui:*)",
       "Bash(npx tsc:*)",
       "Bash(npm view:*)",
-      "Bash(pnpm test:agent:*)"
+      "Bash(pnpm test:agent:*)",
+      "Bash(node -e:*)",
+      "Bash(cat:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

@@ -58,14 +58,8 @@ export function MainLayout({ children }: MainLayoutProps) {
   const labels = getLabelsForPhase(state.phase);
 
   return (
-    <div className="h-screen flex overflow-hidden">
-      {/* Main content area - 70% */}
-      <main className="flex-[7] bg-gray-50 overflow-auto">{children}</main>
-
-      {/* CopilotKit sidebar - 30% */}
-      <aside className="flex-[3] border-l border-gray-200 bg-white">
-        <CopilotSidebar labels={labels} className="h-full" />
-      </aside>
-    </div>
+    <CopilotSidebar labels={labels}>
+      <main className="h-screen bg-gray-50 overflow-auto">{children}</main>
+    </CopilotSidebar>
   );
 }
