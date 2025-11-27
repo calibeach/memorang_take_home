@@ -20,6 +20,7 @@ import {
   educationalGuardrailsMiddleware,
 } from "../middleware/index.js";
 import { logger, logAgentThinking, logAgentSuccess, logAgentError } from "../utils/logger.js";
+import { AI_CONFIG } from "../config/ai.config.js";
 
 /**
  * Message format for middleware state
@@ -157,7 +158,7 @@ class StudyBuddyAgent {
 
   constructor(options: { model?: string; middleware?: Middleware[] } = {}) {
     this.model = new ChatOpenAI({
-      model: options.model || "gpt-4o-mini",
+      model: options.model || AI_CONFIG.models.studyBuddy,
       temperature: 0.7,
     });
 
@@ -192,7 +193,7 @@ class StudyBuddyAgent {
 
     // Phase 2: Call the model
     console.log("\n" + "=".repeat(60));
-    console.log("🤖 CALLING LLM MODEL: gpt-4o-mini");
+    console.log(`🤖 CALLING LLM MODEL: ${AI_CONFIG.models.studyBuddy}`);
     console.log("=".repeat(60));
     console.log(`   Messages in context: ${state.messages.length}`);
 
@@ -232,7 +233,7 @@ class StudyBuddyAgent {
  * Pre-configured Study Buddy agent instance with middleware
  */
 const studyBuddyAgent = new StudyBuddyAgent({
-  model: "gpt-4o-mini",
+  model: AI_CONFIG.models.studyBuddy,
   middleware: [
     contextInjectionMiddleware as Middleware,
     educationalGuardrailsMiddleware as Middleware,
