@@ -157,9 +157,12 @@ class StudyBuddyAgent {
   private middleware: Middleware[];
 
   constructor(options: { model?: string; middleware?: Middleware[] } = {}) {
+    const modelName = options.model || AI_CONFIG.models.studyBuddy;
+    const isGpt5 = modelName.startsWith("gpt-5");
+
     this.model = new ChatOpenAI({
-      model: options.model || AI_CONFIG.models.studyBuddy,
-      temperature: 0.7,
+      model: modelName,
+      ...(isGpt5 ? {} : { temperature: 0.7 }),
     });
 
     this.middleware = options.middleware || [];
@@ -277,7 +280,7 @@ export async function askStudyBuddy(question: string, context: StudyBuddyContext
 
     logAgentSuccess("StudyBuddy", "Generated response", {
       responseLength: result.content.length,
-      responsePreview: result.content.slice(0, 100) + "...",
+      response: result.content,
     });
 
     logger.endSection();

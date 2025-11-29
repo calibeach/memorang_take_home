@@ -69,7 +69,13 @@ Guidelines:
 - Explain concepts clearly at an appropriate level
 - Use examples when helpful
 - Guide thinking, don't give direct answers
-- Be encouraging and supportive`;
+- Be encouraging and supportive
+
+FORMAT RULES (follow strictly):
+- Keep responses to 3-4 short paragraphs maximum
+- Use bullet points sparingly - only 3-4 items when listing
+- Lead with the most important insight first
+- End with: "Would you like me to elaborate on any part of this?"`;
 
   // Add expertise-based language guidance
   if (context.userExpertise === "beginner") {

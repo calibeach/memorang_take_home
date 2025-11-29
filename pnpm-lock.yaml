@@ -120,6 +120,9 @@ importers:
       '@copilotkit/runtime':
         specifier: ^1.8.0
         version: 1.10.6(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.41)(@ag-ui/encoder@0.0.41)(@ag-ui/langgraph@0.0.18(@ag-ui/client@0.0.41)(@ag-ui/core@0.0.41)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@ag-ui/proto@0.0.41)(@aws-crypto/sha256-js@5.2.0)(@aws-sdk/client-bedrock-agent-runtime@3.936.0)(@aws-sdk/client-bedrock-runtime@3.938.0)(@aws-sdk/client-kendra@3.936.0)(@aws-sdk/credential-provider-node@3.936.0)(@browserbasehq/sdk@2.6.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.56.1)(deepmerge@4.3.1)(dotenv@16.6.1)(openai@4.104.0(ws@8.18.3)(zod@3.25.76))(zod@3.25.76))(@ibm-cloud/watsonx-ai@1.7.4)(@smithy/util-utf8@2.3.0)(axios@1.13.2)(fast-xml-parser@5.2.5)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.4.4)(ignore@5.3.2)(jsdom@25.0.1)(jsonwebtoken@9.0.2)(playwright@1.56.1)(react@18.3.1)(weaviate-client@3.9.0)(ws@8.18.3)
+      '@copilotkit/runtime-client-gql':
+        specifier: ^1.10.6
+        version: 1.10.6(graphql@16.12.0)(react@18.3.1)
       next:
         specifier: 14.2.21
         version: 14.2.21(@babel/core@7.28.5)(@playwright/test@1.56.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -9545,7 +9548,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.13.2)
+      retry-axios: 2.6.0(axios@1.13.2(debug@4.4.3))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -11362,7 +11365,7 @@ snapshots:
       onetime: 7.0.0
       signal-exit: 4.1.0
 
-  retry-axios@2.6.0(axios@1.13.2):
+  retry-axios@2.6.0(axios@1.13.2(debug@4.4.3)):
     dependencies:
       axios: 1.13.2(debug@4.4.3)
 

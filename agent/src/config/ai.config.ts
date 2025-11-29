@@ -9,7 +9,7 @@ export const AI_CONFIG = {
     summary: "gpt-4o-mini",
     critique: "gpt-4o-mini",
     refine: "gpt-4o-mini",
-    studyBuddy: "gpt-5-mini", // Better model for educational assistance
+    studyBuddy: "gpt-5-nano",
   },
   temperatures: {
     planning: 0.3,

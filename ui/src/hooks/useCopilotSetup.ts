@@ -1,13 +1,7 @@
 "use client";
 
-import {
-  useCopilotReadable,
-  useCopilotAction,
-  useCopilotMessagesContext,
-} from "@copilotkit/react-core";
+import { useCopilotReadable, useCopilotAction } from "@copilotkit/react-core";
 import { useLearningContext } from "@/contexts";
-import { askStudyBuddy } from "@/lib/api";
-import { filterSensitiveContent } from "@/lib/answerProtection";
 import { LEARNING_ASSISTANT_PROMPT } from "@/app/api/copilotkit/systemPrompt";
 
 /**
@@ -16,10 +10,8 @@ import { LEARNING_ASSISTANT_PROMPT } from "@/app/api/copilotkit/systemPrompt";
  */
 export function useCopilotSetup() {
   const { state, actions } = useLearningContext();
-  const { messages: copilotMessages } = useCopilotMessagesContext();
   const {
     phase,
-    threadId,
     objectives,
     currentMcq,
     mcqIndex,
@@ -29,6 +21,7 @@ export function useCopilotSetup() {
     estimatedTime,
     pdfSummary,
     progressReport,
+    answerFeedback,
   } = state;
 
   // CRITICAL: System instructions to prevent answer reveals
@@ -43,7 +36,6 @@ export function useCopilotSetup() {
     description: "Current learning session state",
     value: {
       phase,
-      threadId,
       objectives: objectives.map((o) => o.title),
       currentQuestion: currentMcq?.question,
       progress: totalMcqs > 0 ? `${mcqIndex + 1}/${totalMcqs}` : "Not started",
@@ -63,6 +55,14 @@ export function useCopilotSetup() {
           attemptCount: userAttempts[currentMcq.id] || 0,
           questionNumber: mcqIndex + 1,
           totalQuestions: totalMcqs,
+          // User's answer state (if they've answered)
+          userAnswer: answerFeedback
+            ? {
+                selectedOption: answerFeedback.selectedAnswer,
+                selectedText: currentMcq.options[answerFeedback.selectedAnswer],
+                wasCorrect: answerFeedback.isCorrect,
+              }
+            : null,
           // correctAnswer: INTENTIONALLY OMITTED - AI should not know the answer
         }
       : null,
@@ -177,86 +177,6 @@ export function useCopilotSetup() {
       }
 
       return `Let's think about "${concept}" in the context of what we're learning. How might this concept relate to the current material?`;
-    },
-  });
-
-  // Study Buddy action: AI-powered help with middleware (LangChain v1 Demo)
-  useCopilotAction({
-    name: "askStudyBuddyForHelp",
-    description:
-      "Ask the Study Buddy AI for help understanding a concept. " +
-      "This uses LangChain v1 middleware for context-aware responses. " +
-      "Use this when the student needs deeper explanation or is struggling with a question.",
-    parameters: [
-      {
-        name: "question",
-        type: "string",
-        description: "The student's question or what they need help understanding",
-        required: true,
-      },
-      {
-        name: "expertiseLevel",
-        type: "string",
-        description: "Student expertise level: 'beginner', 'intermediate', or 'advanced'",
-        required: false,
-      },
-    ],
-    handler: async ({ question, expertiseLevel }) => {
-      if (!threadId) {
-        return "No active learning session. Please upload a PDF to start learning.";
-      }
-
-      try {
-        // Determine expertise level based on performance or use provided value
-        let expertise: "beginner" | "intermediate" | "advanced" = "beginner";
-        if (expertiseLevel) {
-          expertise = expertiseLevel as "beginner" | "intermediate" | "advanced";
-        } else if (currentMcq) {
-          // Auto-detect based on attempts: more attempts = probably struggling = simpler language
-          const attempts = userAttempts[currentMcq.id] || 0;
-          if (attempts >= 3) {
-            expertise = "beginner"; // Struggling, use simpler language
-          } else if (attempts === 0) {
-            expertise = "intermediate"; // First attempt, normal level
-          }
-        }
-
-        // Extract recent messages for conversational context (last 5)
-        // CopilotKit messages may have different structures, so we safely extract text messages
-        const recentMessages = copilotMessages
-          .slice(-5)
-          .filter((m): m is { role: string; content: string } & typeof m => {
-            const msg = m as { role?: string; content?: string };
-            return (
-              typeof msg.role === "string" &&
-              (msg.role === "user" || msg.role === "assistant") &&
-              typeof msg.content === "string"
-            );
-          })
-          .map((m) => ({
-            role: (m as { role: string }).role as "user" | "assistant",
-            content: (m as { content: string }).content,
-          }));
-
-        // Call the Study Buddy backend (demonstrates middleware pipeline)
-        const result = await askStudyBuddy(threadId, question, expertise, recentMessages);
-
-        // Apply client-side filtering as an extra safety layer
-        // This catches anything the backend middleware might have missed
-        const filteredResponse = filterSensitiveContent(result.response, currentMcq);
-
-        // Return the response with middleware info for transparency
-        return (
-          filteredResponse +
-          `\n\n---\n_Powered by Study Buddy (${result.middlewareApplied.join(" → ")})_`
-        );
-      } catch (error) {
-        console.error("Study Buddy error:", error);
-        return (
-          "I'm having trouble connecting to Study Buddy right now. Let me try to help directly: " +
-          "Think about the key concepts in the question and how they relate to what you've learned."
-        );
-      }
     },
   });
 }

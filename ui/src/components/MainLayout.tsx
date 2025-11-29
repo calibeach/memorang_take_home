@@ -6,6 +6,7 @@ import "@copilotkit/react-ui/styles.css";
 import type { Phase } from "@/lib/types";
 import { PHASE_SPECIFIC_PROMPTS } from "@/app/api/copilotkit/systemPrompt";
 import { useLearningContext } from "@/contexts";
+import { CustomChatInput } from "./CustomChatInput";
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -58,7 +59,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   const labels = getLabelsForPhase(state.phase);
 
   return (
-    <CopilotSidebar labels={labels}>
+    <CopilotSidebar labels={labels} Input={CustomChatInput}>
       <main className="h-screen bg-gray-50 overflow-auto">{children}</main>
     </CopilotSidebar>
   );

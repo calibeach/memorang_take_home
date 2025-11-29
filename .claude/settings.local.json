@@ -17,7 +17,10 @@
       "Bash(node -e:*)",
       "Bash(cat:*)",
       "WebSearch",
-      "Bash(npx prettier:*)"
+      "Bash(npx prettier:*)",
+      "WebFetch(domain:docs.copilotkit.ai)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(pnpm add:*)"
     ],
     "deny": [],
     "ask": []
