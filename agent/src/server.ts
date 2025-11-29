@@ -10,6 +10,7 @@ import { CONFIG, validateConfig } from "./config.js";
 import { generateId } from "./utils/helpers.js";
 import { ValidationError, normalizeError } from "./utils/errors.js";
 import { InterruptHandler } from "./services/index.js";
+import { askStudyBuddy, type StudyBuddyContext } from "./agents/studyBuddy.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -244,6 +245,100 @@ app.post("/api/threads/:threadId/answer", async (req, res) => {
   }
 });
 
+/**
+ * Ask the Study Buddy agent for help (LangChain v1 Middleware Demo)
+ *
+ * This endpoint demonstrates LangChain v1's middleware pattern:
+ * - beforeModel: Context injection middleware dynamically builds prompts
+ * - afterModel: Guardrails middleware validates educational appropriateness
+ *
+ * The Study Buddy runs alongside the main LangGraph workflow, providing
+ * on-demand help without disrupting the quiz flow.
+ */
+app.post("/api/threads/:threadId/ask", async (req, res) => {
+  const { threadId } = req.params;
+  const { question, userExpertise = "beginner", recentMessages } = req.body;
+
+  console.log(`[Server] Study Buddy question for thread ${threadId}`);
+  if (recentMessages?.length) {
+    console.log(`[Server] Received ${recentMessages.length} recent messages for context`);
+  }
+
+  if (!question) {
+    return res.status(400).json({ error: "Question is required" });
+  }
+
+  try {
+    // Get current state from the main LangGraph workflow
+    const config = {
+      configurable: { thread_id: threadId },
+    };
+    const state = await graph.getState(config);
+    const values = state.values || {};
+
+    // Build context from current learning state
+    const context: StudyBuddyContext = {
+      threadId,
+      userExpertise: userExpertise as "beginner" | "intermediate" | "advanced",
+      attemptCount: 0,
+      recentMessages: recentMessages as
+        | Array<{ role: "user" | "assistant"; content: string }>
+        | undefined,
+    };
+
+    // Add PDF content if available (truncated for context window)
+    if (values.pdfContent) {
+      context.pdfContent = values.pdfContent.slice(0, 3000);
+    }
+
+    // Add current objective if in quiz phase
+    if (values.learningObjectives && values.currentObjectiveIdx !== undefined) {
+      const objective = values.learningObjectives[values.currentObjectiveIdx];
+      if (objective) {
+        context.currentObjective = {
+          title: objective.title,
+          description: objective.description,
+        };
+      }
+    }
+
+    // Add current MCQ for guardrails (prevents answer reveals)
+    if (values.mcqs && values.currentMcqIdx !== undefined) {
+      const mcq = values.mcqs[values.currentMcqIdx];
+      if (mcq) {
+        // Get user's selected answer if they've answered this question
+        const userSelectedAnswer = values.userAnswers?.[mcq.id];
+
+        context.currentMcq = {
+          question: mcq.question,
+          options: mcq.options,
+          correctAnswer: mcq.correctAnswer,
+          userSelectedAnswer,
+        };
+        context.attemptCount = values.attemptCounts?.[mcq.id] || 0;
+      }
+    }
+
+    // Invoke Study Buddy agent with middleware pipeline
+    const response = await askStudyBuddy(question, context);
+
+    res.json({
+      response,
+      middlewareApplied: ["ContextInjectionMiddleware", "EducationalGuardrailsMiddleware"],
+      context: {
+        hasObjective: !!context.currentObjective,
+        hasQuestion: !!context.currentMcq,
+        expertise: context.userExpertise,
+      },
+    });
+  } catch (error) {
+    console.error("[Server] Study Buddy error:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Study Buddy request failed",
+    });
+  }
+});
+
 // Error handling middleware
 app.use(
   (err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -277,5 +372,6 @@ app.listen(PORT, () => {
   console.log(`  POST /api/threads/:threadId/invoke - Start/continue workflow`);
   console.log(`  GET  /api/threads/:threadId/state - Get current state`);
   console.log(`  POST /api/threads/:threadId/answer - Submit an answer`);
+  console.log(`  POST /api/threads/:threadId/ask - Study Buddy (Middleware Demo)`);
   console.log(`  GET  /health - Health check\n`);
 });

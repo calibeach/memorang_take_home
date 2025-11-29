@@ -45,7 +45,7 @@ export class ReflectionService {
     });
 
     const model = new ChatOpenAI({
-      model: AI_CONFIG.model,
+      model: AI_CONFIG.models.critique || AI_CONFIG.model,
       temperature: AI_CONFIG.temperatures.critique,
     });
 
@@ -99,7 +99,7 @@ Evaluate for factual accuracy, clarity, educational value, and overall quality.`
     });
 
     const model = new ChatOpenAI({
-      model: AI_CONFIG.model,
+      model: AI_CONFIG.models.refine || AI_CONFIG.model,
       temperature: AI_CONFIG.temperatures.refine,
     });
 

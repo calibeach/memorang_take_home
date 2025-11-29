@@ -2,6 +2,7 @@
 
 import { useCopilotReadable, useCopilotAction } from "@copilotkit/react-core";
 import { useLearningContext } from "@/contexts";
+import { LEARNING_ASSISTANT_PROMPT } from "@/app/api/copilotkit/systemPrompt";
 
 /**
  * Sets up CopilotKit readables and actions for the learning assistant.
@@ -11,7 +12,6 @@ export function useCopilotSetup() {
   const { state, actions } = useLearningContext();
   const {
     phase,
-    threadId,
     objectives,
     currentMcq,
     mcqIndex,
@@ -21,14 +21,21 @@ export function useCopilotSetup() {
     estimatedTime,
     pdfSummary,
     progressReport,
+    answerFeedback,
   } = state;
+
+  // CRITICAL: System instructions to prevent answer reveals
+  // This is injected as a high-priority readable that the AI sees first
+  useCopilotReadable({
+    description: "SYSTEM INSTRUCTIONS - FOLLOW THESE RULES STRICTLY",
+    value: LEARNING_ASSISTANT_PROMPT,
+  });
 
   // Current learning session state
   useCopilotReadable({
     description: "Current learning session state",
     value: {
       phase,
-      threadId,
       objectives: objectives.map((o) => o.title),
       currentQuestion: currentMcq?.question,
       progress: totalMcqs > 0 ? `${mcqIndex + 1}/${totalMcqs}` : "Not started",
@@ -36,8 +43,9 @@ export function useCopilotSetup() {
   });
 
   // Enhanced MCQ context for smarter assistance
+  // IMPORTANT: We intentionally do NOT share correctAnswer to prevent the AI from revealing it
   useCopilotReadable({
-    description: "Current MCQ full context",
+    description: "Current MCQ context (answer hidden for educational integrity)",
     value: currentMcq
       ? {
           question: currentMcq.question,
@@ -47,6 +55,15 @@ export function useCopilotSetup() {
           attemptCount: userAttempts[currentMcq.id] || 0,
           questionNumber: mcqIndex + 1,
           totalQuestions: totalMcqs,
+          // User's answer state (if they've answered)
+          userAnswer: answerFeedback
+            ? {
+                selectedOption: answerFeedback.selectedAnswer,
+                selectedText: currentMcq.options[answerFeedback.selectedAnswer],
+                wasCorrect: answerFeedback.isCorrect,
+              }
+            : null,
+          // correctAnswer: INTENTIONALLY OMITTED - AI should not know the answer
         }
       : null,
   });

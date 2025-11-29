@@ -77,3 +77,40 @@ export async function getThreadState(threadId: string): Promise<{
 
   return response.json();
 }
+
+/**
+ * Ask the Study Buddy agent for help (LangChain v1 Middleware Demo)
+ *
+ * This calls the backend Study Buddy endpoint which demonstrates:
+ * - beforeModel middleware: Context injection
+ * - afterModel middleware: Educational guardrails
+ */
+export async function askStudyBuddy(
+  threadId: string,
+  question: string,
+  userExpertise: "beginner" | "intermediate" | "advanced" = "beginner",
+  recentMessages?: Array<{ role: "user" | "assistant"; content: string }>
+): Promise<{
+  response: string;
+  middlewareApplied: string[];
+  context: {
+    hasObjective: boolean;
+    hasQuestion: boolean;
+    expertise: string;
+  };
+}> {
+  const response = await fetch(`${API_BASE}/api/threads/${threadId}/ask`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ question, userExpertise, recentMessages }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Study Buddy request failed");
+  }
+
+  return response.json();
+}

@@ -13,7 +13,14 @@
       "Bash(pnpm lint:ui:*)",
       "Bash(npx tsc:*)",
       "Bash(npm view:*)",
-      "Bash(pnpm test:agent:*)"
+      "Bash(pnpm test:agent:*)",
+      "Bash(node -e:*)",
+      "Bash(cat:*)",
+      "WebSearch",
+      "Bash(npx prettier:*)",
+      "WebFetch(domain:docs.copilotkit.ai)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(pnpm add:*)"
     ],
     "deny": [],
     "ask": []

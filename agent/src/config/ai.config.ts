@@ -2,7 +2,15 @@
  * AI-specific configuration for model settings and content processing limits.
  */
 export const AI_CONFIG = {
-  model: "gpt-4o-mini",
+  model: "gpt-4o-mini", // Default fallback
+  models: {
+    planning: "gpt-4o-mini",
+    quiz: "gpt-4o-mini",
+    summary: "gpt-4o-mini",
+    critique: "gpt-4o-mini",
+    refine: "gpt-4o-mini",
+    studyBuddy: "gpt-5-nano",
+  },
   temperatures: {
     planning: 0.3,
     quiz: 0.5,
