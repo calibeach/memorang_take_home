@@ -13,6 +13,7 @@
 
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, SystemMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
+import { type RunnableConfig } from "@langchain/core/runnables";
 import {
   type StudyBuddyContext,
   studyBuddyContextSchema,
@@ -178,7 +179,7 @@ class StudyBuddyAgent {
    */
   async invoke(
     input: { messages: MiddlewareMessage[] },
-    options: { context: StudyBuddyContext }
+    options: { context: StudyBuddyContext; config?: RunnableConfig }
   ): Promise<{ messages: MiddlewareMessage[]; content: string }> {
     const runtime: MiddlewareRuntime = { context: options.context };
 
@@ -201,7 +202,7 @@ class StudyBuddyAgent {
     console.log(`   Messages in context: ${state.messages.length}`);
 
     const baseMessages = toBaseMessages(state.messages);
-    const response = await this.model.invoke(baseMessages);
+    const response = await this.model.invoke(baseMessages, options.config);
     const assistantContent =
       typeof response.content === "string" ? response.content : JSON.stringify(response.content);
 
@@ -255,7 +256,11 @@ const studyBuddyAgent = new StudyBuddyAgent({
  * @param context - Learning context from the main workflow
  * @returns The agent's response
  */
-export async function askStudyBuddy(question: string, context: StudyBuddyContext): Promise<string> {
+export async function askStudyBuddy(
+  question: string,
+  context: StudyBuddyContext,
+  config?: RunnableConfig
+): Promise<string> {
   logger.startSection("Study Buddy Agent (Middleware Demo)");
 
   logAgentThinking("StudyBuddy", "Processing student question", {
@@ -275,7 +280,7 @@ export async function askStudyBuddy(question: string, context: StudyBuddyContext
       {
         messages: [{ role: "user", content: question }],
       },
-      { context: validatedContext }
+      { context: validatedContext, config }
     );
 
     logAgentSuccess("StudyBuddy", "Generated response", {

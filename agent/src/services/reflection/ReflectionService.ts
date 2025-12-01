@@ -1,4 +1,5 @@
 import { ChatOpenAI } from "@langchain/openai";
+import { type RunnableConfig } from "@langchain/core/runnables";
 import { AI_CONFIG } from "../../config/ai.config.js";
 import {
   CritiqueSchema,
@@ -36,9 +37,14 @@ export class ReflectionService {
    *
    * @param content - The MCQ batch content to critique (as JSON string or object)
    * @param context - The prompt context for critique
+   * @param config - Optional LangChain RunnableConfig for tracing
    * @returns The critique result
    */
-  static async critiqueContent(content: unknown, context: PromptContext): Promise<Critique> {
+  static async critiqueContent(
+    content: unknown,
+    context: PromptContext,
+    config?: RunnableConfig
+  ): Promise<Critique> {
     logAgentThinking("Reflection", "Starting critique phase", {
       purpose: context.purpose,
       objectiveTitle: context.objectiveTitle,
@@ -55,20 +61,23 @@ export class ReflectionService {
 
     const contentString = typeof content === "string" ? content : JSON.stringify(content, null, 2);
 
-    const critique = await structuredModel.invoke([
-      {
-        role: "system",
-        content: BASE_PROMPTS.critique,
-      },
-      {
-        role: "user",
-        content: `Please critique the following MCQ content for the learning objective "${context.objectiveTitle || "unknown"}":
+    const critique = await structuredModel.invoke(
+      [
+        {
+          role: "system",
+          content: BASE_PROMPTS.critique,
+        },
+        {
+          role: "user",
+          content: `Please critique the following MCQ content for the learning objective "${context.objectiveTitle || "unknown"}":
 
 ${contentString}
 
 Evaluate for factual accuracy, clarity, educational value, and overall quality.`,
-      },
-    ]);
+        },
+      ],
+      config
+    );
 
     logAgentSuccess("Reflection", "Critique completed", {
       hasErrors: critique.hasErrors,
@@ -86,12 +95,14 @@ Evaluate for factual accuracy, clarity, educational value, and overall quality.`
    * @param originalContent - The original MCQ batch content
    * @param critique - The critique to address
    * @param context - The prompt context for refinement
+   * @param config - Optional LangChain RunnableConfig for tracing
    * @returns The refined MCQ batch
    */
   static async refineContent(
     originalContent: unknown,
     critique: Critique,
-    _context: PromptContext
+    _context: PromptContext,
+    config?: RunnableConfig
   ): Promise<{ questions: unknown[]; refinementSummary: string }> {
     logAgentThinking("Reflection", "Starting refinement phase", {
       issueCount: critique.issues.length,
@@ -112,14 +123,15 @@ Evaluate for factual accuracy, clarity, educational value, and overall quality.`
         ? originalContent
         : JSON.stringify(originalContent, null, 2);
 
-    const refined = await structuredModel.invoke([
-      {
-        role: "system",
-        content: BASE_PROMPTS.refine,
-      },
-      {
-        role: "user",
-        content: `Please refine the following MCQ content based on the critique provided.
+    const refined = await structuredModel.invoke(
+      [
+        {
+          role: "system",
+          content: BASE_PROMPTS.refine,
+        },
+        {
+          role: "user",
+          content: `Please refine the following MCQ content based on the critique provided.
 
 ## Original Content
 ${contentString}
@@ -132,8 +144,10 @@ ${contentString}
 - Educationally Sound: ${critique.isEducationallySound}
 
 Please address all issues and implement the suggestions while maintaining the educational intent.`,
-      },
-    ]);
+        },
+      ],
+      config
+    );
 
     logAgentSuccess("Reflection", "Refinement completed", {
       refinementSummary: refined.refinementSummary,
@@ -149,12 +163,14 @@ Please address all issues and implement the suggestions while maintaining the ed
    * @param generateFn - The function that generates the initial content
    * @param context - The prompt context
    * @param options - Reflection options (uses defaults if not provided)
+   * @param config - Optional LangChain RunnableConfig for tracing
    * @returns The reflection result with final output
    */
   static async withReflection<T extends { questions: unknown[] }>(
     generateFn: () => Promise<T>,
     context: PromptContext,
-    options: Partial<ReflectionOptions> = {}
+    options: Partial<ReflectionOptions> = {},
+    config?: RunnableConfig
   ): Promise<ReflectionResult<T>> {
     const opts: ReflectionOptions = {
       ...DEFAULT_REFLECTION_OPTIONS,
@@ -189,7 +205,7 @@ Please address all issues and implement the suggestions while maintaining the ed
       iterations++;
 
       // Critique the current output
-      const critique = await this.critiqueContent(currentOutput, context);
+      const critique = await this.critiqueContent(currentOutput, context, config);
       lastCritique = critique;
 
       // Check if refinement is needed
@@ -215,7 +231,7 @@ Please address all issues and implement the suggestions while maintaining the ed
       });
 
       // Refine the content
-      const refined = await this.refineContent(currentOutput, critique, context);
+      const refined = await this.refineContent(currentOutput, critique, context, config);
       refinementSummary = refined.refinementSummary;
 
       // Update output with refined questions while preserving structure
