@@ -23,6 +23,12 @@ export const LearningStateAnnotation = Annotation.Root({
     default: () => "",
   }),
 
+  // Thread identifier for session tracking
+  threadId: Annotation<string | null>({
+    reducer: (_, update) => update,
+    default: () => null,
+  }),
+
   // Learning plan
   learningObjectives: Annotation<LearningObjective[]>({
     reducer: (_, update) => update,

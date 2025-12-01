@@ -12,6 +12,9 @@ export const CONFIG = {
   PORT: parseInt(process.env.PORT || "8000", 10),
   NODE_ENV: process.env.NODE_ENV || "development",
 
+  // Database configuration
+  DATABASE_URL: process.env.DATABASE_URL || "",
+
   // File handling
   UPLOAD: {
     DIR: "../uploads",
@@ -82,7 +85,7 @@ export type AppConfig = typeof CONFIG;
  * Validate required environment variables
  */
 export function validateConfig(): void {
-  const required = ["OPENAI_API_KEY"];
+  const required = ["OPENAI_API_KEY", "DATABASE_URL"];
 
   const missing = required.filter((key) => !process.env[key]);
 

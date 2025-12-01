@@ -1,4 +1,5 @@
 import { LearningPlanSchema, type LearningObjective } from "../schemas/index.js";
+import { type RunnableConfig } from "@langchain/core/runnables";
 import type { LearningState } from "../state.js";
 import {
   logger,
@@ -13,7 +14,10 @@ import { AIModelFactory, ContentProcessor, NodeResponse } from "../services/inde
  * Node that analyzes PDF content and generates a learning plan.
  * Uses structured output to ensure consistent plan format.
  */
-export async function plannerNode(state: LearningState): Promise<Partial<LearningState>> {
+export async function plannerNode(
+  state: LearningState,
+  config?: RunnableConfig
+): Promise<Partial<LearningState>> {
   logger.startSection("Learning Plan Generator Agent");
 
   const { pdfContent } = state;
@@ -62,10 +66,11 @@ export async function plannerNode(state: LearningState): Promise<Partial<Learnin
 
     logger.info("Planner", "Sending content to AI model for learning plan generation");
 
-    const plan = await structuredModel.invoke([
-      {
-        role: "system",
-        content: `You are an expert educational content designer. Analyze the provided document and create a structured learning plan.
+    const plan = await structuredModel.invoke(
+      [
+        {
+          role: "system",
+          content: `You are an expert educational content designer. Analyze the provided document and create a structured learning plan.
 
 Your task:
 1. Identify 3-5 key learning objectives from the content
@@ -78,12 +83,14 @@ Guidelines:
 - Cover the most important concepts in the document
 - Make objectives clear and achievable
 - Each objective should be distinct (no overlap)`,
-      },
-      {
-        role: "user",
-        content: `Please analyze this document and create a learning plan:\n\n${truncatedContent}`,
-      },
-    ]);
+        },
+        {
+          role: "user",
+          content: `Please analyze this document and create a learning plan:\n\n${truncatedContent}`,
+        },
+      ],
+      config
+    );
 
     logAgentSuccess("Planner", "AI model returned structured learning plan", {
       objectiveCount: plan.objectives.length,

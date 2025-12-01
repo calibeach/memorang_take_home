@@ -1,4 +1,5 @@
 import { MCQBatchSchema, type MCQ, type LearningObjective } from "../schemas/index.js";
+import { type RunnableConfig } from "@langchain/core/runnables";
 import type { LearningState } from "../state.js";
 import {
   logger,
@@ -49,7 +50,8 @@ async function generateRawMCQs(
   objective: LearningObjective,
   pdfContent: string,
   promptContext: PromptContext,
-  agentLabel: string
+  agentLabel: string,
+  config?: RunnableConfig
 ): Promise<RawMCQBatch> {
   const structuredModel = AIModelFactory.createStructured("quiz", MCQBatchSchema, "generate_mcqs");
   const { content: truncatedContent } = ContentProcessor.truncate(pdfContent, "quiz", agentLabel);
@@ -57,14 +59,15 @@ async function generateRawMCQs(
   // Build dynamic system prompt
   const systemPrompt = buildSystemPrompt(promptContext);
 
-  const mcqBatch = await structuredModel.invoke([
-    {
-      role: "system",
-      content: systemPrompt,
-    },
-    {
-      role: "user",
-      content: `Based on this document content:
+  const mcqBatch = await structuredModel.invoke(
+    [
+      {
+        role: "system",
+        content: systemPrompt,
+      },
+      {
+        role: "user",
+        content: `Based on this document content:
 ---
 ${truncatedContent}
 ---
@@ -74,8 +77,10 @@ Title: ${objective.title}
 Description: ${objective.description}
 Difficulty: ${objective.difficulty}
 Objective ID: ${objective.id}`,
-    },
-  ]);
+      },
+    ],
+    config
+  );
 
   // Type assertion: the structured model returns data matching our schema
   return mcqBatch as RawMCQBatch;
@@ -115,7 +120,8 @@ async function generateQuestionsForObjective(
   objective: LearningObjective,
   pdfContent: string,
   agentLabel: string = "Quiz Generator",
-  useReflection: boolean = true
+  useReflection: boolean = true,
+  config?: RunnableConfig
 ): Promise<MCQ[]> {
   // Build prompt context for this objective
   const promptContext: PromptContext = {
@@ -134,9 +140,10 @@ async function generateQuestionsForObjective(
 
     // Wrap generation with reflection
     const reflectionResult = await ReflectionService.withReflection(
-      () => generateRawMCQs(objective, pdfContent, promptContext, agentLabel),
+      () => generateRawMCQs(objective, pdfContent, promptContext, agentLabel, config),
       promptContext,
-      reflectionOptions
+      reflectionOptions,
+      config
     );
 
     logAgentSuccess(agentLabel, "Reflection completed", {
@@ -152,7 +159,13 @@ async function generateQuestionsForObjective(
     );
   } else {
     // Generate without reflection
-    const mcqBatch = await generateRawMCQs(objective, pdfContent, promptContext, agentLabel);
+    const mcqBatch = await generateRawMCQs(
+      objective,
+      pdfContent,
+      promptContext,
+      agentLabel,
+      config
+    );
     return finalizeQuestions(mcqBatch.questions, objective);
   }
 }
@@ -170,7 +183,10 @@ function getSessionKey(learningObjectives: LearningObjective[]): string {
  * Creates 3 questions per objective with hints and explanations.
  * Also prefetches the next objective's questions in the background.
  */
-export async function quizGeneratorNode(state: LearningState): Promise<Partial<LearningState>> {
+export async function quizGeneratorNode(
+  state: LearningState,
+  config?: RunnableConfig
+): Promise<Partial<LearningState>> {
   logger.startSection("Quiz Generator Agent");
 
   const {
@@ -240,7 +256,9 @@ export async function quizGeneratorNode(state: LearningState): Promise<Partial<L
       questionsForCurrent = await generateQuestionsForObjective(
         currentObjective,
         pdfContent,
-        "Quiz Generator"
+        "Quiz Generator",
+        true,
+        config
       );
 
       logAgentSuccess("Quiz Generator", `Generated ${questionsForCurrent.length} MCQs`);
@@ -258,10 +276,14 @@ export async function quizGeneratorNode(state: LearningState): Promise<Partial<L
       });
 
       // Start prefetch but don't await - let it run in background
+      // Note: LangSmith tracing errors may occur for prefetch due to async context issues,
+      // but this doesn't affect functionality.
       const prefetchPromise = generateQuestionsForObjective(
         nextObjective,
         pdfContent,
-        "Quiz Generator (Prefetch)"
+        "Quiz Generator (Prefetch)",
+        true,
+        undefined
       );
 
       // Store promise in cache for feedback node to await later

@@ -4,13 +4,14 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { graph } from "./graph.js";
+import { getGraph, initializeGraph, checkpointer } from "./graph.js";
 import { Command } from "@langchain/langgraph";
 import { CONFIG, validateConfig } from "./config.js";
 import { generateId } from "./utils/helpers.js";
 import { ValidationError, normalizeError } from "./utils/errors.js";
 import { InterruptHandler } from "./services/index.js";
 import { askStudyBuddy, type StudyBuddyContext } from "./agents/studyBuddy.js";
+import { initializeSessionsTable, closePool, createSession } from "./db/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -83,6 +84,9 @@ app.post("/api/upload", upload.single("pdf"), async (req, res) => {
 
     const threadId = generateId("thread");
 
+    // Create session record in database
+    await createSession(threadId, req.file.originalname);
+
     console.log(`[Server] Created new thread: ${threadId}`);
     console.log(`[Server] PDF uploaded: ${req.file.path}`);
 
@@ -117,6 +121,8 @@ app.post("/api/threads/:threadId/invoke", async (req, res) => {
 
     let result;
 
+    const graph = getGraph();
+
     if (resumeValue !== undefined) {
       // Resume from an interrupt
       console.log(`[Server] Resuming with value:`, resumeValue);
@@ -129,6 +135,7 @@ app.post("/api/threads/:threadId/invoke", async (req, res) => {
       result = await graph.invoke(
         {
           pdfPath,
+          threadId,
           currentPhase: "upload",
         },
         config
@@ -184,6 +191,7 @@ app.get("/api/threads/:threadId/state", async (req, res) => {
       },
     };
 
+    const graph = getGraph();
     const state = await graph.getState(config);
 
     res.json({
@@ -215,6 +223,8 @@ app.post("/api/threads/:threadId/answer", async (req, res) => {
         thread_id: threadId,
       },
     };
+
+    const graph = getGraph();
 
     // Resume the workflow with the answer
     const result = await graph.invoke(new Command({ resume: answer }), config);
@@ -273,6 +283,7 @@ app.post("/api/threads/:threadId/ask", async (req, res) => {
     const config = {
       configurable: { thread_id: threadId },
     };
+    const graph = getGraph();
     const state = await graph.getState(config);
     const values = state.values || {};
 
@@ -320,7 +331,7 @@ app.post("/api/threads/:threadId/ask", async (req, res) => {
     }
 
     // Invoke Study Buddy agent with middleware pipeline
-    const response = await askStudyBuddy(question, context);
+    const response = await askStudyBuddy(question, context, config);
 
     res.json({
       response,
@@ -362,16 +373,60 @@ app.use(
   }
 );
 
-// Start server
+// Start server with async initialization
 const PORT = CONFIG.PORT;
 
-app.listen(PORT, () => {
-  console.log(`\n🚀 Learning Agent Server running on http://localhost:${PORT}`);
-  console.log(`\nEndpoints:`);
-  console.log(`  POST /api/upload - Upload a PDF`);
-  console.log(`  POST /api/threads/:threadId/invoke - Start/continue workflow`);
-  console.log(`  GET  /api/threads/:threadId/state - Get current state`);
-  console.log(`  POST /api/threads/:threadId/answer - Submit an answer`);
-  console.log(`  POST /api/threads/:threadId/ask - Study Buddy (Middleware Demo)`);
-  console.log(`  GET  /health - Health check\n`);
-});
+async function startServer() {
+  try {
+    // Initialize PostgreSQL checkpointer and compile graph
+    console.log("[Server] Initializing database connections...");
+    await initializeGraph();
+    await initializeSessionsTable();
+    console.log("[Server] Database initialization complete");
+
+    const server = app.listen(PORT, () => {
+      console.log(`\n🚀 Learning Agent Server running on http://localhost:${PORT}`);
+      console.log(`\nEndpoints:`);
+      console.log(`  POST /api/upload - Upload a PDF`);
+      console.log(`  POST /api/threads/:threadId/invoke - Start/continue workflow`);
+      console.log(`  GET  /api/threads/:threadId/state - Get current state`);
+      console.log(`  POST /api/threads/:threadId/answer - Submit an answer`);
+      console.log(`  POST /api/threads/:threadId/ask - Study Buddy (Middleware Demo)`);
+      console.log(`  GET  /health - Health check\n`);
+    });
+
+    // Graceful shutdown handler
+    const gracefulShutdown = async (signal: string) => {
+      console.log(`\n[Server] Received ${signal}, shutting down gracefully...`);
+
+      server.close(async () => {
+        console.log("[Server] HTTP server closed");
+
+        // Close PostgreSQL connections
+        try {
+          await checkpointer.end();
+          await closePool();
+          console.log("[Server] Database connections closed");
+        } catch (err) {
+          console.error("[Server] Error closing database:", err);
+        }
+
+        process.exit(0);
+      });
+
+      // Force exit after 10 seconds
+      setTimeout(() => {
+        console.error("[Server] Forced shutdown after timeout");
+        process.exit(1);
+      }, 10000);
+    };
+
+    process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+    process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+  } catch (error) {
+    console.error("[Server] Failed to start server:", error);
+    process.exit(1);
+  }
+}
+
+startServer();

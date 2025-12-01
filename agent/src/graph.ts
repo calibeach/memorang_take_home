@@ -1,4 +1,5 @@
-import { StateGraph, START, END, MemorySaver } from "@langchain/langgraph";
+import { StateGraph, START, END } from "@langchain/langgraph";
+import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import { LearningStateAnnotation, type LearningState } from "./state.js";
 import {
   pdfParserNode,
@@ -9,6 +10,7 @@ import {
   summaryNode,
 } from "./nodes/index.js";
 import { logger } from "./utils/logger.js";
+import { CONFIG } from "./config.js";
 
 // Define node names as constants
 const NODES = {
@@ -141,14 +143,36 @@ function buildGraph() {
   return builder;
 }
 
-// Create the checkpointer for persistence
-const checkpointer = new MemorySaver();
+// Create the PostgreSQL checkpointer for persistence
+export const checkpointer = PostgresSaver.fromConnString(CONFIG.DATABASE_URL);
 
-// Build and compile the graph
+// Build the graph (compilation happens after checkpointer setup)
 const graphBuilder = buildGraph();
-export const graph = graphBuilder.compile({
-  checkpointer,
-});
 
-// Export for use in server
-export { checkpointer };
+// Graph instance - will be compiled after setup
+let compiledGraph: ReturnType<typeof graphBuilder.compile> | null = null;
+
+/**
+ * Initialize the checkpointer and compile the graph.
+ * Must be called before using the graph.
+ */
+export async function initializeGraph(): Promise<void> {
+  logger.info("Graph", "Setting up PostgreSQL checkpointer...");
+  await checkpointer.setup();
+  logger.info("Graph", "PostgreSQL checkpointer ready");
+
+  compiledGraph = graphBuilder.compile({
+    checkpointer,
+  });
+}
+
+/**
+ * Get the compiled graph instance.
+ * Throws if graph hasn't been initialized.
+ */
+export function getGraph() {
+  if (!compiledGraph) {
+    throw new Error("Graph not initialized. Call initializeGraph() first.");
+  }
+  return compiledGraph;
+}

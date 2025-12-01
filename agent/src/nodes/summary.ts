@@ -1,4 +1,5 @@
 import { ProgressReportSchema } from "../schemas/index.js";
+import { type RunnableConfig } from "@langchain/core/runnables";
 import type { LearningState } from "../state.js";
 import { logger, logAgentThinking, logAgentSuccess, logAgentError } from "../utils/logger.js";
 import {
@@ -7,11 +8,15 @@ import {
   ScoreCalculator,
   NodeResponse,
 } from "../services/index.js";
+import { completeSession } from "../db/index.js";
 
 /**
  * Node that generates a progress report and study tips at the end of the session.
  */
-export async function summaryNode(state: LearningState): Promise<Partial<LearningState>> {
+export async function summaryNode(
+  state: LearningState,
+  config?: RunnableConfig
+): Promise<Partial<LearningState>> {
   logger.startSection("Summary Agent");
   logAgentThinking("Summary", "Generating progress report...");
 
@@ -52,20 +57,21 @@ export async function summaryNode(state: LearningState): Promise<Partial<Learnin
       "Summary"
     );
 
-    const report = await structuredModel.invoke([
-      {
-        role: "system",
-        content: `You are a supportive learning coach. Generate a progress report with personalized study tips based on the student's performance.
+    const report = await structuredModel.invoke(
+      [
+        {
+          role: "system",
+          content: `You are a supportive learning coach. Generate a progress report with personalized study tips based on the student's performance.
 
 Be encouraging but honest. Focus on:
 1. Celebrating successes
 2. Identifying specific areas for improvement
 3. Providing actionable study strategies
 4. Recommending next steps`,
-      },
-      {
-        role: "user",
-        content: `Student Performance Summary:
+        },
+        {
+          role: "user",
+          content: `Student Performance Summary:
 - Total Questions: ${scoreResult.totalQuestions}
 - Correct Answers: ${scoreResult.correctCount}
 - Score: ${scoreResult.score}%
@@ -76,10 +82,22 @@ Document Topics (for context):
 ${truncatedContent.slice(0, 500)}...
 
 Please generate a detailed progress report with 3-5 personalized study tips.`,
-      },
-    ]);
+        },
+      ],
+      config
+    );
 
     logAgentSuccess("Summary", `Generated progress report. Score: ${scoreResult.score}%`);
+
+    // Mark session as complete in database
+    if (state.threadId) {
+      await completeSession(state.threadId, {
+        correctAnswers: scoreResult.correctCount,
+        totalQuestions: scoreResult.totalQuestions,
+      });
+      logAgentThinking("Summary", "Session marked as complete in database");
+    }
+
     logger.endSection();
 
     return {
