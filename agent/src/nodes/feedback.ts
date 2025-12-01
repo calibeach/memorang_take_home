@@ -176,9 +176,13 @@ export async function feedbackNode(state: LearningState): Promise<Partial<Learni
   // Get current attempt count for this question (starts at 1)
   const currentAttemptCount = (attemptCounts[currentMcq.id] || 0) + 1;
 
-  // Generate progressive hint based on attempt count
-  // For struggling students, the hint becomes more helpful
-  const dynamicHint = getProgressiveHint(currentMcq.hint, currentAttemptCount);
+  // Generate progressive hint based on attempt count and question context
+  // For struggling students, the hint becomes more helpful and contextual
+  const dynamicHint = getProgressiveHint(currentMcq.hint, currentAttemptCount, {
+    question: currentMcq.question,
+    options: currentMcq.options,
+    objectiveTitle: learningObjectives?.[currentObjectiveIdx]?.title,
+  });
 
   // Build typed interrupt payload with dynamic hint
   const interruptPayload: AnswerMCQInterrupt = {
