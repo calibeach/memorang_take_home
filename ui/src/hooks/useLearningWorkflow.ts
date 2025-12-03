@@ -164,6 +164,12 @@ export function useLearningWorkflow() {
     async (approved: boolean) => {
       if (!state.threadId) return;
 
+      // If rejecting, just reset to upload phase - no need to call backend
+      if (!approved) {
+        actions.reset();
+        return;
+      }
+
       actions.setLoading(true);
       actions.setError(null);
 
