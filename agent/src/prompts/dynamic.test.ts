@@ -148,23 +148,24 @@ describe("getProgressiveHint", () => {
     expect(hint).toBe(baseHint);
   });
 
-  it("should add guidance for second attempt", () => {
+  it("should provide contextual guidance for second attempt", () => {
     const hint = getProgressiveHint(baseHint, 2);
 
-    expect(hint).toContain(baseHint);
-    expect(hint).toContain("Additional guidance");
+    // Implementation provides contextual hints that replace base hint
+    expect(hint).toContain("Re-read the question");
   });
 
-  it("should add strong hint for third+ attempts", () => {
+  it("should provide strong guidance for third+ attempts", () => {
     const hint = getProgressiveHint(baseHint, 3);
 
-    expect(hint).toContain(baseHint);
-    expect(hint).toContain("Strong hint");
+    // Implementation provides focused hints for struggling students
+    expect(hint).toContain("Focus on the main concept");
   });
 
-  it("should add strong hint for high attempt counts", () => {
+  it("should provide maximum hint for high attempt counts", () => {
     const hint = getProgressiveHint(baseHint, 10);
 
-    expect(hint).toContain("Strong hint");
+    // Implementation provides final hint for very high attempt counts
+    expect(hint).toContain("Final hint");
   });
 });

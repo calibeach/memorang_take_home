@@ -2,50 +2,101 @@
 
 An AI-powered learning agent that transforms PDFs into interactive MCQ lessons with intelligent tutoring support.
 
+## What Makes This Different
+
+Beyond the standard LangGraph workflow (interrupt patterns, PostgreSQL checkpointing), this project tackles three non-obvious problems:
+
+1. **Answer Protection as Systems Design** - The AI tutor needs context to help, but can't leak answers. Prompt engineering alone isn't reliable.
+2. **Dynamic System Prompts** - The AI adapts its language and approach based on expertise level, attempt count, and answer history at runtime.
+3. **Quality Gates** - LLM-generated MCQs go through self-critique before reaching students.
+
+## Architecture
+
+### Two-Agent System: Trust Boundaries
+
+This project uses two separate AI assistants with different trust levels:
+
+| Agent           | Runs On     | Correct Answer Access | Use Case                            |
+| --------------- | ----------- | --------------------- | ----------------------------------- |
+| **CopilotKit**  | Client-side | No (by design)        | General tutoring, concept questions |
+| **Study Buddy** | Server-side | Yes (for validation)  | Quiz-specific help, graduated hints |
+
+**Why two agents?** It's not just about answer protection - Study Buddy gives _better answers_ because it has richer context. The system prompt is rewritten at runtime based on the student's state.
+
+### LangChain v1 Middleware Patterns
+
+Study Buddy is built using LangChain v1 patterns:
+
+- **`beforeModel` hooks** - Dynamic context injection
+- **`afterModel` hooks** - Response validation before delivery
+- **Runtime prompt rewriting** - Not static prompts, but prompts that adapt to state
+
+These are the same middleware patterns that power LangChain's new deep agents.
+
+## Answer Protection: Defense in Depth
+
+Four layers prevent the AI from revealing quiz answers:
+
+**Layer 1: Context Omission**
+CopilotKit's readable context excludes `correctAnswer` entirely. The client-side tutor literally cannot see it.
+
+**Layer 2: Server-Side Validation**
+Study Buddy runs on the server with answer access, but responses go through a middleware pipeline _before_ reaching the client.
+
+**Layer 3: Pattern Matching**
+Regex catches obvious leaks: "the answer is", "option B is correct", "you should pick".
+
+**Layer 4: Semantic Detection**
+If the response contains the exact text of the correct option in a revealing context, it's replaced with a safe redirect.
+
+**Key insight**: This isn't a prompt problem - it's a trust boundary problem. CopilotKit uses request-level middleware (`onBeforeRequest`), while Study Buddy uses LangChain v1's model-level middleware (`beforeModel`/`afterModel`) that runs on every LLM call with full state access. Where does computation happen, and what does each layer have access to?
+
+## Dynamic System Prompts
+
+Study Buddy's `beforeModel` middleware builds a context-aware system prompt that includes:
+
+- **Expertise-level adaptation** - Beginner: "use simple language, avoid jargon." Advanced: "use precise technical language, be rigorous."
+- **Answer state awareness** - Knows if you answered, what you picked, whether you were right/wrong, and adapts guidance accordingly
+- **Struggle detection** - If `attemptCount >= 3`, adds: "The student is struggling. Be extra supportive. Break concepts into smaller parts."
+- **PDF content access** - Can reference actual source material (truncated to 3000 chars)
+- **Conversation continuity** - Recent messages injected for natural follow-up
+
+A beginner on their fifth attempt gets a fundamentally different AI than an advanced student on their first try.
+
+## MCQ Quality Gates
+
+Generated MCQs aren't reliable enough to ship directly. A reflection loop adds quality control:
+
+1. **Generate** - Create MCQ batch
+2. **Critique** - Score 1-10 on clarity and accuracy
+3. **Refine** - If below 7, regenerate with feedback
+4. **Repeat** - Up to 2 iterations
+
+The critique catches:
+
+- "Option C could also be correct"
+- "The question assumes knowledge not in the PDF"
+- "This tests reading comprehension, not the concept"
+
+Trade-off is latency (~1 second per iteration), but for educational content, a bad question is worse than a slow one.
+
 ## Features
 
-- **PDF Upload & Processing**: Upload any educational PDF and automatically extract key concepts
-- **Personalized Learning Plans**: AI generates 3-5 learning objectives tailored to the content
-- **Human-in-the-Loop Approval**: Review and approve learning plans before starting
-- **Interactive MCQs**: Multiple choice questions with visual feedback (green/red)
-- **Smart Learning Assistant**: CopilotKit chat that provides hints without giving away answers
-- **Graduated Hint System**: Adaptive assistance based on struggle level
-- **Progress Tracking**: Final report with score, study tips, and areas to review
-
-## Enhanced Chat Features
-
-The learning assistant uses advanced educational techniques:
-
-### Socratic Method
-
-- Asks guiding questions instead of giving answers
-- Helps students discover solutions through reasoning
-- Builds critical thinking skills
-
-### Graduated Hints
-
-1. **Level 1**: Focuses attention on key concepts
-2. **Level 2**: Helps eliminate wrong answers through logic
-3. **Level 3**: Provides more specific guidance while maintaining discovery
-
-### Answer Protection
-
-- Never reveals correct answers directly
-- Filters out accidental answer revelations
-- Redirects to educational guidance
-
-### Context-Aware Assistance
-
-- Knows current question, options, and difficulty
-- Tracks user attempts and adjusts help accordingly
-- Connects questions to broader learning objectives
+- **PDF Upload & Processing** - Upload any educational PDF and extract key concepts
+- **Personalized Learning Plans** - AI generates 3-5 learning objectives tailored to content
+- **Human-in-the-Loop Approval** - Review and approve plans before starting (LangGraph interrupt pattern)
+- **Interactive MCQs** - Multiple choice questions with visual feedback
+- **Two AI Assistants** - CopilotKit for general help, Study Buddy for quiz-specific guidance
+- **Graduated Hint System** - Adaptive assistance based on struggle level
+- **Progress Tracking** - Final report with score, study tips, and areas to review
+- **PostgreSQL Persistence** - Sessions survive browser refreshes and server restarts
 
 ## Setup
 
 1. **Install dependencies**:
 
    ```bash
-   npx pnpm install
+   pnpm install
    ```
 
 2. **Configure environment**:
@@ -57,106 +108,65 @@ The learning assistant uses advanced educational techniques:
    cp ui/.env.local.example ui/.env.local
 
    # Add your OpenAI API key to all .env files
+   # Add DATABASE_URL for PostgreSQL
    ```
 
 3. **Start development servers**:
 
    ```bash
    # Start both agent and UI
-   npx pnpm dev
+   pnpm dev
 
    # Or start individually:
    # Terminal 1 - Agent (port 8000)
-   cd agent && npx pnpm dev
+   cd agent && pnpm dev
 
    # Terminal 2 - UI (port 3000)
-   cd ui && npx pnpm dev
+   cd ui && pnpm dev
    ```
 
 4. **Open browser**: Navigate to http://localhost:3000
-
-## Testing the Chat Integration
-
-### During Quiz Phase
-
-Try these prompts to test the educational features:
-
-1. **Request a hint**:
-   - "I'm stuck on this question, can you help?"
-   - "Can you give me a hint?"
-
-2. **Ask about specific options**:
-   - "What about option 2?"
-   - "Can you explain why option A might work?"
-
-3. **Review concepts**:
-   - "Can you explain [concept] from the material?"
-   - "What does this question relate to?"
-
-### What to Verify
-
-- ✅ Assistant never directly says which option is correct
-- ✅ Hints become more helpful with more attempts
-- ✅ Explanations focus on reasoning, not answers
-- ✅ Assistant knows the current question context
-- ✅ Different messages appear for different phases
-
-### Example Interaction
-
-**Student**: "What's the answer to this question?"
-
-**Assistant**: "Let's think about what this question is really asking. Focus on the key words in the question. What concept is being tested here?"
-
-**Student**: "I think it might be option B"
-
-**Assistant**: "Let's think about option B. Consider: How does this relate to the question? What assumptions would make this correct or incorrect? Think through the implications of choosing this option."
 
 ## Project Structure
 
 ```
 memorang-learning-agent/
-├── agent/                 # LangGraph.js backend
+├── agent/                    # LangGraph.js backend
 │   ├── src/
-│   │   ├── nodes/        # Workflow nodes
-│   │   ├── schemas/      # Zod schemas
-│   │   ├── graph.ts      # StateGraph workflow
-│   │   └── server.ts     # Express API
+│   │   ├── nodes/           # Workflow nodes (parser, planner, quiz, etc.)
+│   │   ├── agents/          # Study Buddy agent
+│   │   ├── middleware/      # LangChain v1 beforeModel/afterModel hooks
+│   │   ├── schemas/         # Zod schemas for structured output
+│   │   ├── services/        # AI model factory, reflection service
+│   │   ├── graph.ts         # StateGraph workflow
+│   │   └── server.ts        # Express API
 │   └── package.json
-├── ui/                    # Next.js + CopilotKit frontend
+├── ui/                       # Next.js + CopilotKit frontend
 │   ├── src/
-│   │   ├── app/          # Next.js app router
-│   │   ├── components/   # React components
-│   │   └── lib/          # Utilities & types
+│   │   ├── app/             # Next.js app router
+│   │   ├── components/      # React components
+│   │   ├── hooks/           # useCopilotSetup, useStudyBuddy
+│   │   └── lib/             # API client, answer protection
 │   └── package.json
-└── pnpm-workspace.yaml   # Monorepo config
+└── pnpm-workspace.yaml      # Monorepo config
 ```
 
 ## Technologies
 
-- **Backend**: LangGraph.js, Express, TypeScript
+- **Backend**: LangGraph.js, Express, TypeScript, PostgreSQL
 - **Frontend**: Next.js 14, CopilotKit, Tailwind CSS
-- **AI**: OpenAI GPT-4, Structured Output with Zod
-- **Package Manager**: pnpm workspaces
+- **AI**: OpenAI GPT-4o-mini, Structured Output with Zod
+- **Patterns**: LangChain v1 middleware, human-in-the-loop, reflection loops
 
-## Key Components
+## Key Files
 
-### Answer Protection System
-
-- `ui/src/lib/answerProtection.ts` - Filters direct answer revelations
-- Pattern matching to detect and remove answer giveaways
-- Educational response generation
-
-### Smart Actions
-
-- `provideHint` - Graduated hints based on attempts
-- `explainOption` - Analyze specific MCQ options
-- `reviewConcept` - Connect to learning objectives
-
-### Dynamic UI
-
-- Phase-aware chat labels
-- Context-specific placeholder text
-- Adaptive assistant personality
+| File                              | Purpose                                             |
+| --------------------------------- | --------------------------------------------------- |
+| `agent/src/middleware/index.ts`   | beforeModel/afterModel hooks, dynamic prompts       |
+| `agent/src/agents/studyBuddy.ts`  | Server-side quiz assistant with middleware pipeline |
+| `agent/src/services/reflection/`  | MCQ self-critique and refinement                    |
+| `ui/src/hooks/useCopilotSetup.ts` | CopilotKit context (answer omitted)                 |
+| `ui/src/lib/answerProtection.ts`  | Client-side answer filtering                        |
 
 ## License
 

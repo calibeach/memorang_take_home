@@ -115,7 +115,7 @@ export async function feedbackNode(state: LearningState): Promise<Partial<Learni
     logAgentSuccess("Feedback", "All objectives completed, moving to summary");
     logger.endSection();
     return {
-      currentPhase: "quiz", // Will trigger summary (all objectives done)
+      currentPhase: "summary",
     };
   }
 
